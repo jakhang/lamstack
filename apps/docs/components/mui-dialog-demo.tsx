@@ -1,12 +1,18 @@
 'use client';
 
 import * as React from 'react';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardActions from '@mui/material/CardActions';
+import CardContent from '@mui/material/CardContent';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import Rating from '@mui/material/Rating';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
@@ -83,32 +89,233 @@ function PromptDialog({
   );
 }
 
+// Demonstrates open() with a dialog outside the three built-in kinds — its own payload
+// (ItemPayload) and result (number | null), using MUI's <Rating> component.
+interface ItemPayload {
+  itemName: string;
+}
+
+function RatingDialog({ payload, open, onClose }: DialogProps<ItemPayload, number | null>) {
+  const [value, setValue] = React.useState<number | null>(null);
+  return (
+    <Dialog open={open} onClose={() => onClose(null)}>
+      <DialogTitle>Rate &ldquo;{payload.itemName}&rdquo;</DialogTitle>
+      <DialogContent>
+        <Rating value={value} onChange={(_event, newValue) => setValue(newValue)} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => onClose(null)}>Skip</Button>
+        <Button disabled={value === null} onClick={() => onClose(value)} variant="contained">
+          Submit
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// Demonstrates awaiting DialogProps.onClose(result) inside the dialog itself to show a
+// loading state — that promise only resolves once the caller's own async `onClose` option
+// (passed to open()) has finished, so this needs no extra plumbing to know when to stop
+// spinning.
+function SaveDialog({ payload, open, onClose }: DialogProps<ItemPayload, boolean>) {
+  const [pending, setPending] = React.useState(false);
+  return (
+    <Dialog open={open} onClose={() => !pending && onClose(false)}>
+      <DialogTitle>Save changes?</DialogTitle>
+      <DialogContent>
+        <DialogContentText>Save changes to &ldquo;{payload.itemName}&rdquo;?</DialogContentText>
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={pending} onClick={() => onClose(false)}>
+          Cancel
+        </Button>
+        <Button
+          disabled={pending}
+          variant="contained"
+          startIcon={pending ? <CircularProgress size={16} color="inherit" /> : null}
+          onClick={async () => {
+            setPending(true);
+            await onClose(true);
+          }}
+        >
+          {pending ? 'Saving…' : 'Save'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 const templates: DialogTemplates = {
   alert: AlertDialog,
   confirm: ConfirmDialog,
   prompt: PromptDialog,
 };
 
+interface DemoAction {
+  id: string;
+  title: string;
+  description: string;
+  run: () => Promise<string>;
+}
+
 function DemoButtons() {
-  const { confirm } = useDialogs();
-  const [result, setResult] = React.useState<string | null>(null);
+  const { alert, confirm, prompt, open } = useDialogs();
+  const [log, setLog] = React.useState<{ id: number; text: string }[]>([]);
+  const [busy, setBusy] = React.useState(false);
+  const nextLogId = React.useRef(0);
+
+  function record(text: string) {
+    nextLogId.current += 1;
+    setLog((prev) => [{ id: nextLogId.current, text }, ...prev].slice(0, 6));
+  }
+
+  const actions: DemoAction[] = [
+    {
+      id: 'alert',
+      title: 'alert()',
+      description: 'Acknowledgement only — resolves void once dismissed.',
+      run: async () => {
+        await alert('Your changes have been saved.', { title: 'Success' });
+        return 'alert() → acknowledged';
+      },
+    },
+    {
+      id: 'confirm',
+      title: 'confirm()',
+      description: 'Resolves true/false depending on which button was pressed.',
+      run: async () => {
+        const confirmed = await confirm('Delete this item? This cannot be undone.', {
+          title: 'Are you sure?',
+          okText: 'Delete',
+          cancelText: 'Cancel',
+        });
+        return `confirm() → ${confirmed}`;
+      },
+    },
+    {
+      id: 'prompt',
+      title: 'prompt()',
+      description: 'Resolves the typed string, or null if cancelled.',
+      run: async () => {
+        const value = await prompt('What should we call this?', {
+          title: 'Rename',
+          placeholder: 'New name',
+        });
+        return `prompt() → ${JSON.stringify(value)}`;
+      },
+    },
+    {
+      id: 'custom',
+      title: 'open(custom)',
+      description: 'Any component works, not just alert/confirm/prompt — here, a rating.',
+      run: async () => {
+        const rating = await open(RatingDialog, { itemName: 'Acme Widget' });
+        return `open(RatingDialog) → ${JSON.stringify(rating)}`;
+      },
+    },
+    {
+      id: 'loading',
+      title: 'async onClose()',
+      description:
+        'onClose runs before the promise resolves — the dialog awaits it to show "Saving…" with no extra state.',
+      run: async () => {
+        const start = Date.now();
+        const saved = await open(
+          SaveDialog,
+          { itemName: 'Acme Widget' },
+          {
+            onClose: async () => {
+              await new Promise((resolve) => setTimeout(resolve, 1200));
+            },
+          },
+        );
+        return `open(SaveDialog) → saved=${saved} (${Date.now() - start}ms)`;
+      },
+    },
+  ];
+
+  async function runAction(action: DemoAction) {
+    setBusy(true);
+    try {
+      record(await action.run());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runChainedFlow() {
+    setBusy(true);
+    try {
+      const proceed = await confirm('Rename this item before continuing?', {
+        okText: 'Yes, rename it',
+        cancelText: 'Skip',
+      });
+      record(`1. confirm() → ${proceed}`);
+      if (!proceed) return;
+
+      const name = await prompt('New name:', { placeholder: 'e.g. Q3 Report' });
+      record(`2. prompt() → ${JSON.stringify(name)}`);
+      if (!name) return;
+
+      await alert(`Renamed to "${name}".`, { title: 'Done' });
+      record('3. alert() → acknowledged');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <Stack sx={{ alignItems: 'flex-start' }} spacing={1.5}>
-      <Button
-        variant="contained"
-        onClick={async () => {
-          const confirmed = await confirm('Delete this item? This cannot be undone.', {
-            title: 'Are you sure?',
-            okText: 'Delete',
-            cancelText: 'Cancel',
-          });
-          setResult(confirmed ? 'Confirmed' : 'Cancelled');
-        }}
-      >
-        Open confirm dialog
-      </Button>
-      {result ? <Typography variant="body2">Result: {result}</Typography> : null}
+    <Stack spacing={2}>
+      <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+        {actions.map((action) => (
+          <Card key={action.id} variant="outlined" sx={{ display: 'flex', flexDirection: 'column' }}>
+            <CardContent>
+              <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                {action.title}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                {action.description}
+              </Typography>
+            </CardContent>
+            <CardActions sx={{ mt: 'auto' }}>
+              <Button size="small" disabled={busy} onClick={() => runAction(action)}>
+                Run
+              </Button>
+            </CardActions>
+          </Card>
+        ))}
+      </Box>
+
+      <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
+        <CardContent>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            Chaining dialogs with async/await
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Each call blocks until its dialog closes, so a multi-step flow — confirm, then
+            prompt, then alert — reads top-to-bottom. No nested callbacks, no extra state
+            for tracking which dialog is currently open.
+          </Typography>
+          <Button sx={{ mt: 1.5 }} variant="contained" disabled={busy} onClick={runChainedFlow}>
+            Run guided flow
+          </Button>
+        </CardContent>
+      </Card>
+
+      {log.length > 0 ? (
+        <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+          {log.map((entry) => (
+            <Typography
+              key={entry.id}
+              variant="caption"
+              component="div"
+              sx={{ fontFamily: 'monospace' }}
+            >
+              {entry.text}
+            </Typography>
+          ))}
+        </Box>
+      ) : null}
     </Stack>
   );
 }

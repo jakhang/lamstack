@@ -1,6 +1,6 @@
 # Task List: omnireact — dialog + core packages
 
-## Task 1: Repo scaffold — git init, pnpm workspace root, shared configs
+## Task 1: Repo scaffold — git init, pnpm workspace root, shared configs — DONE
 
 **Description:** Initialize the git repo (remote already exists at
 `git@github.com:jakhang/omnireact.git`, add it but do not push), set up the pnpm

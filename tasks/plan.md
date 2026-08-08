@@ -58,12 +58,12 @@ Import rewrites needed when porting `dialog`:
 
 ### Phase 1: Foundation
 
-- [ ] Task 1: Repo scaffold — git init, pnpm workspace root, shared configs
+- [x] Task 1: Repo scaffold — git init, pnpm workspace root, shared configs
 
 ### Checkpoint: Foundation
-- [ ] `pnpm install` succeeds at root
-- [ ] `git log` shows an initial commit
-- [ ] `pnpm -r lint` runs (no packages yet, but config is valid)
+- [x] `pnpm install` succeeds at root
+- [x] `git log` shows an initial commit
+- [x] `pnpm -r lint` runs (no packages yet, but config is valid)
 
 ### Phase 2: Core package
 

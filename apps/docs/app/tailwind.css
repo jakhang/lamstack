@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+
+/* nextra-theme-docs toggles a `dark` class on <html> via next-themes (attribute: 'class'
+   is its default) — match that here instead of Tailwind's default OS-media-query dark
+   mode, so our demos follow the docs site's own theme toggle, not just the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));

@@ -10,9 +10,9 @@ pnpm add @omnireact/dialog
 
 ## Packages
 
-| Package | Description |
-| --- | --- |
-| [`@omnireact/core`](./packages/core) | Shared internal-ish hooks other `@omnireact/*` packages build on. Usable standalone. |
+| Package                                  | Description                                                                                   |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [`@omnireact/core`](./packages/core)     | Shared internal-ish hooks other `@omnireact/*` packages build on. Usable standalone.          |
 | [`@omnireact/dialog`](./packages/dialog) | Headless, imperative dialog API (`useDialogs()` → `open`/`close`/`alert`/`confirm`/`prompt`). |
 
 More packages (initializer, data, ...) are planned.

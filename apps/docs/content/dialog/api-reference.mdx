@@ -20,11 +20,11 @@ const templates: DialogTemplates = {
 </DialogsProvider>;
 ```
 
-| Prop | Type | Description |
-| --- | --- | --- |
-| `templates` | `DialogTemplates` | Required. Components used to render `alert`/`confirm`/`prompt`. |
-| `unmountAfter` | `number` | Delay (ms) before a closed dialog is removed from the DOM, so it can play an exit animation. Defaults to `1000`. |
-| `children` | `ReactNode` | Your app. |
+| Prop           | Type              | Description                                                                                                      |
+| -------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `templates`    | `DialogTemplates` | Required. Components used to render `alert`/`confirm`/`prompt`.                                                  |
+| `unmountAfter` | `number`          | Delay (ms) before a closed dialog is removed from the DOM, so it can play an exit animation. Defaults to `1000`. |
+| `children`     | `ReactNode`       | Your app.                                                                                                        |
 
 ## `useDialogs()`
 
@@ -34,16 +34,16 @@ Must be called from a component rendered under `<DialogsProvider>`.
 const { open, close, alert, confirm, prompt } = useDialogs();
 ```
 
-| Member | Signature | Description |
-| --- | --- | --- |
-| `open` | `(Component, payload?, options?) => Promise<R>` | Opens any component satisfying `DialogComponent<P, R>`. Resolves with whatever `R` the dialog closes with. |
-| `close` | `(dialogPromise, result) => Promise<R>` | Closes a dialog by the promise `open()` returned for it. Rarely needed directly — dialogs close themselves via their `onClose` prop. |
-| `alert` | `(msg, options?: AlertOptions) => Promise<void>` | Opens the `templates.alert` component. Resolves once acknowledged. |
-| `confirm` | `(msg, options?: ConfirmOptions) => Promise<boolean>` | Opens `templates.confirm`. Resolves `true`/`false`. |
-| `prompt` | `(msg, options?: PromptOptions) => Promise<string \| null>` | Opens `templates.prompt`. Resolves the entered value, or `null` if cancelled. |
+| Member    | Signature                                                   | Description                                                                                                                          |
+| --------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `open`    | `(Component, payload?, options?) => Promise<R>`             | Opens any component satisfying `DialogComponent<P, R>`. Resolves with whatever `R` the dialog closes with.                           |
+| `close`   | `(dialogPromise, result) => Promise<R>`                     | Closes a dialog by the promise `open()` returned for it. Rarely needed directly — dialogs close themselves via their `onClose` prop. |
+| `alert`   | `(msg, options?: AlertOptions) => Promise<void>`            | Opens the `templates.alert` component. Resolves once acknowledged.                                                                   |
+| `confirm` | `(msg, options?: ConfirmOptions) => Promise<boolean>`       | Opens `templates.confirm`. Resolves `true`/`false`.                                                                                  |
+| `prompt`  | `(msg, options?: PromptOptions) => Promise<string \| null>` | Opens `templates.prompt`. Resolves the entered value, or `null` if cancelled.                                                        |
 
 `AlertOptions`/`ConfirmOptions`/`PromptOptions` all accept an optional `onClose` — an async
-side effect (e.g. an API call) that runs *before* the returned promise resolves and the
+side effect (e.g. an API call) that runs _before_ the returned promise resolves and the
 dialog unmounts. If it throws, the dialog still closes and the promise still resolves; the
 error is logged via `console.error` instead of becoming an unhandled rejection.
 
@@ -52,11 +52,11 @@ error is logged via `console.error` instead of becoming an unhandled rejection.
 Every dialog component (your custom ones, and the three referenced by `DialogTemplates`)
 receives these props:
 
-| Prop | Type | Description |
-| --- | --- | --- |
-| `payload` | `P` | The data passed as `open(Component, payload)`. |
-| `open` | `boolean` | Whether the dialog is currently open (`false` during its exit animation). |
-| `onClose` | `(result: R) => Promise<void>` | Call this to close the dialog with a result. |
+| Prop      | Type                           | Description                                                               |
+| --------- | ------------------------------ | ------------------------------------------------------------------------- |
+| `payload` | `P`                            | The data passed as `open(Component, payload)`.                            |
+| `open`    | `boolean`                      | Whether the dialog is currently open (`false` during its exit animation). |
+| `onClose` | `(result: R) => Promise<void>` | Call this to close the dialog with a result.                              |
 
 ## Custom dialogs
 

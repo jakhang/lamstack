@@ -7,10 +7,10 @@ import { ThemeProvider } from '@mui/material/styles';
 import { muiTheme } from '../lib/mui-theme';
 import 'nextra-theme-docs/style.css';
 import './tailwind.css';
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
+import { Geist } from 'next/font/google';
+import { cn } from '@/lib/utils';
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata = {
   title: {
@@ -25,7 +25,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const pageMap = await getPageMap();
 
   return (
-    <html lang="en" dir="ltr" suppressHydrationWarning className={cn("font-sans", geist.variable)}>
+    <html lang="en" dir="ltr" suppressHydrationWarning className={cn('font-sans', geist.variable)}>
       <Head />
       <body>
         <AppRouterCacheProvider options={{ enableCssLayer: true }}>

@@ -59,9 +59,7 @@ describe('DialogsProvider + useDialogs', () => {
       const [result, setResult] = React.useState<string | null>(null);
       return (
         <div>
-          <button onClick={() => open(EchoDialog, { msg: 'hello' }).then(setResult)}>
-            open
-          </button>
+          <button onClick={() => open(EchoDialog, { msg: 'hello' }).then(setResult)}>open</button>
           <span data-testid="result">{result ?? ''}</span>
         </div>
       );

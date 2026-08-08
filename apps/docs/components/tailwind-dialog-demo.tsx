@@ -10,13 +10,7 @@ import type {
   PromptDialogPayload,
 } from '@omnireact/dialog';
 
-function DialogShell({
-  title,
-  children,
-}: {
-  title?: React.ReactNode;
-  children: React.ReactNode;
-}) {
+function DialogShell({ title, children }: { title?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
@@ -86,11 +80,7 @@ function ConfirmDialog({ payload, open, onClose }: DialogProps<ConfirmDialogPayl
   );
 }
 
-function PromptDialog({
-  payload,
-  open,
-  onClose,
-}: DialogProps<PromptDialogPayload, string | null>) {
+function PromptDialog({ payload, open, onClose }: DialogProps<PromptDialogPayload, string | null>) {
   const [value, setValue] = React.useState(payload.defaultValue ?? '');
   if (!open) return null;
   return (
@@ -211,9 +201,7 @@ function ActionCard({
         <p className="font-mono text-sm font-medium text-neutral-900 dark:text-neutral-100">
           {action.title}
         </p>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          {action.description}
-        </p>
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{action.description}</p>
       </div>
       <SecondaryButton
         className="self-start border border-neutral-300 dark:border-neutral-700"
@@ -347,9 +335,9 @@ function DemoButtons() {
               Chaining dialogs with async/await
             </p>
             <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-              Each call blocks until its dialog closes, so a multi-step flow — confirm,
-              then prompt, then alert — reads top-to-bottom. No nested callbacks, no extra
-              state for tracking which dialog is currently open.
+              Each call blocks until its dialog closes, so a multi-step flow — confirm, then prompt,
+              then alert — reads top-to-bottom. No nested callbacks, no extra state for tracking
+              which dialog is currently open.
             </p>
           </div>
           <PrimaryButton className="self-start" disabled={busy} onClick={runChainedFlow}>
@@ -363,8 +351,8 @@ function DemoButtons() {
               Loading state via async onClose()
             </p>
             <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-              onClose runs before the promise resolves — the dialog awaits it itself to
-              show &quot;Saving…&quot; with no extra state passed in from here.
+              onClose runs before the promise resolves — the dialog awaits it itself to show
+              &quot;Saving…&quot; with no extra state passed in from here.
             </p>
           </div>
           <PrimaryButton className="self-start" disabled={busy} onClick={runLoadingExample}>

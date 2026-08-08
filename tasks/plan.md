@@ -41,6 +41,7 @@ real `git push` / `npm publish`.
 ## Source Inventory (already read, ground truth for the port)
 
 From `D:\Workspace\job\omni.com\dashboard\src\hooks\`:
+
 - `useDialogs/{dialog.context.ts, dialog.provider.tsx, useDialog.tsx, types.ts, index.ts}`
   → becomes `packages/dialog/src/*`
 - `useEventCallback/index.ts` (default export, depends on `useIsomorphicLayoutEffect`)
@@ -51,6 +52,7 @@ From `D:\Workspace\job\omni.com\dashboard\src\hooks\`:
   → `packages/core/src/useIsomorphicLayoutEffect/index.ts`
 
 Import rewrites needed when porting `dialog`:
+
 - `useDialog.tsx`: `../useNonNullableContext` → `@omnireact/core`
 - `dialog.provider.tsx`: `../useEventCallback` → `@omnireact/core`
 
@@ -61,6 +63,7 @@ Import rewrites needed when porting `dialog`:
 - [x] Task 1: Repo scaffold — git init, pnpm workspace root, shared configs
 
 ### Checkpoint: Foundation
+
 - [x] `pnpm install` succeeds at root
 - [x] `git log` shows an initial commit
 - [x] `pnpm -r lint` runs (no packages yet, but config is valid)
@@ -70,6 +73,7 @@ Import rewrites needed when porting `dialog`:
 - [x] Task 2: `@omnireact/core` — port hooks, build, test
 
 ### Checkpoint: Core
+
 - [x] `pnpm --filter @omnireact/core build` succeeds, emits ESM+CJS+d.ts
 - [x] `pnpm --filter @omnireact/core test` passes
 
@@ -78,6 +82,7 @@ Import rewrites needed when porting `dialog`:
 - [x] Task 3: `@omnireact/dialog` — port dialog code, depend on core, build, test
 
 ### Checkpoint: Dialog
+
 - [x] `pnpm --filter @omnireact/dialog build` succeeds
 - [x] `pnpm --filter @omnireact/dialog test` passes
 - [x] `pnpm -r typecheck` clean across both packages
@@ -93,6 +98,7 @@ Import rewrites needed when porting `dialog`:
       `README.md`
 
 ### Checkpoint: Complete
+
 - [x] `pnpm -r build` succeeds for all packages (verified together, correct dependency order: core → dialog → docs)
 - [x] `pnpm -r test` passes for all packages
 - [x] `pnpm --filter docs dev`/`build`+`start` serves the docs site with a working live dialog demo (build+start verified; interactive click-through not verified in an actual browser — no browser automation tool was available)
@@ -104,24 +110,26 @@ The Phase 5 live demo (plain inline-style `DialogDemo`) had real bugs — a made
 `--nextra-bg` CSS variable and no real dark-mode contrast handling — caught by driving it
 with a headless Chrome instance, not by inspection. It was removed rather than patched.
 User decision: prioritize finishing full-feature docs content first (done above — Concepts
-+ Testing pages), then come back and build **real, dependency-backed** live demos, one per
-popular styling approach, each verified the same way (headless Chrome, not just build
-success):
 
-- [x] Task 7: Tailwind CSS demo — add `tailwindcss`/`@tailwindcss/postcss` to `apps/docs`,
+- Testing pages), then come back and build **real, dependency-backed** live demos, one per
+  popular styling approach, each verified the same way (headless Chrome, not just build
+  success):
+
+* [x] Task 7: Tailwind CSS demo — add `tailwindcss`/`@tailwindcss/postcss` to `apps/docs`,
       build a dialog demo styled with Tailwind utility classes, verify interactively
       (headless Chrome click-through, light AND dark mode).
-- [x] Task 8: MUI demo — add `@mui/material`, `@emotion/react`, `@emotion/styled`, and
+* [x] Task 8: MUI demo — add `@mui/material`, `@emotion/react`, `@emotion/styled`, and
       `@mui/material-nextjs` (for the Next.js App Router Emotion SSR cache), build a dialog
       demo using MUI `Dialog`/`Button`, verify interactively.
-- [x] Task 9: shadcn/ui demo — set up Tailwind (shared with Task 7) + run the actual
+* [x] Task 9: shadcn/ui demo — set up Tailwind (shared with Task 7) + run the actual
       `shadcn` CLI to scaffold its real `Dialog` component (don't hand-write it from
       memory — component source/conventions change between shadcn versions), wire it to
       `@omnireact/dialog`'s templates, verify interactively.
-- [x] Task 10: Docs nav — add a "Guides" or "Recipes" section linking all three, replacing
+* [x] Task 10: Docs nav — add a "Guides" or "Recipes" section linking all three, replacing
       the "coming soon" note in `content/dialog/index.mdx`.
 
 ### Checkpoint: Phase 6 complete
+
 - [x] All three guides (Tailwind, MUI, shadcn/ui) verified with real headless Chrome
       click-through, light AND dark mode — not just successful builds
 - [x] `pnpm --filter docs build` succeeds with all 10 pages prerendered
@@ -131,11 +139,11 @@ success):
 
 ## Risks and Mitigations
 
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Nextra + React 19 + this tsup-built ESM/CJS package resolution mismatch (dual package hazard) | Med | Use `"exports"` map with explicit `import`/`require`/`types` conditions in each package.json; verify by actually running the docs dev server against the workspace-linked package in Task 5, not just building in isolation. |
-| Prettier reformatting on port changes diffs enough to obscure review | Low | Format immediately after copying, before making logic edits, so the "port" commit is copy+format only and any later logic changes show a clean diff. |
-| `invariant`'s CJS-only types interacting oddly with tsup ESM output | Low | Known-working combination (dashboard already uses it under Vite); confirm via the package's own build+test in Task 3. |
+| Risk                                                                                          | Impact | Mitigation                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nextra + React 19 + this tsup-built ESM/CJS package resolution mismatch (dual package hazard) | Med    | Use `"exports"` map with explicit `import`/`require`/`types` conditions in each package.json; verify by actually running the docs dev server against the workspace-linked package in Task 5, not just building in isolation. |
+| Prettier reformatting on port changes diffs enough to obscure review                          | Low    | Format immediately after copying, before making logic edits, so the "port" commit is copy+format only and any later logic changes show a clean diff.                                                                         |
+| `invariant`'s CJS-only types interacting oddly with tsup ESM output                           | Low    | Known-working combination (dashboard already uses it under Vite); confirm via the package's own build+test in Task 3.                                                                                                        |
 
 ## Open Questions
 

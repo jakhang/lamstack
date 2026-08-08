@@ -10,7 +10,7 @@
     "test": "pnpm -r run test",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
-    "format": "prettier --write \"**/*.{ts,tsx,md,mdx,json}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,md,mdx,json,yaml,yml}\"",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm -r build && changeset publish"

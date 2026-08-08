@@ -10,6 +10,7 @@ root `package.json` with workspace scripts, and `pnpm-workspace.yaml` covering
 `packages/*` and `apps/*`.
 
 **Acceptance criteria:**
+
 - [ ] `git init`, `git remote add origin git@github.com:jakhang/omnireact.git` (no push)
 - [ ] `pnpm-workspace.yaml` lists `packages/*` and `apps/*`
 - [ ] Root `package.json`: `private: true`, `type: module`, workspace-wide scripts
@@ -29,6 +30,7 @@ root `package.json` with workspace scripts, and `pnpm-workspace.yaml` covering
       Task 2/5)
 
 **Verification:**
+
 - [ ] `pnpm install` runs clean at root (no packages yet is fine)
 - [ ] `git status` shows a clean working tree after the initial commit
 - [ ] `git log --oneline` shows exactly one commit
@@ -36,6 +38,7 @@ root `package.json` with workspace scripts, and `pnpm-workspace.yaml` covering
 **Dependencies:** None
 
 **Files likely touched:**
+
 - `pnpm-workspace.yaml`, `package.json`, `tsconfig.base.json`, `eslint.config.js`,
   `.prettierrc`, `.gitignore`, `LICENSE`, `README.md`
 
@@ -52,6 +55,7 @@ logic changes), set up its `package.json`, `tsup.config.ts`, `vitest.config.ts`,
 `tsconfig.json`, and write tests.
 
 **Acceptance criteria:**
+
 - [ ] `packages/core/src/useEventCallback/index.ts` — ported, default export preserved
 - [ ] `packages/core/src/useNonNullableContext/index.ts` — ported, named export preserved
 - [ ] `packages/core/src/useIsomorphicLayoutEffect/index.ts` — ported, named export preserved
@@ -69,6 +73,7 @@ logic changes), set up its `package.json`, `tsup.config.ts`, `vitest.config.ts`,
       `useIsomorphicLayoutEffect` (resolves to `useLayoutEffect` in a DOM environment)
 
 **Verification:**
+
 - [ ] `pnpm --filter @omnireact/core test` passes
 - [ ] `pnpm --filter @omnireact/core build` succeeds, `dist/` contains `.mjs`, `.js` (or
       `.cjs`), and `.d.ts`
@@ -77,6 +82,7 @@ logic changes), set up its `package.json`, `tsup.config.ts`, `vitest.config.ts`,
 **Dependencies:** Task 1
 
 **Files likely touched:**
+
 - `packages/core/src/**`, `packages/core/package.json`, `packages/core/tsup.config.ts`,
   `packages/core/vitest.config.ts`, `packages/core/tsconfig.json`
 
@@ -94,13 +100,14 @@ imports (`../useNonNullableContext` and `../useEventCallback`) to `@omnireact/co
 pattern.
 
 **Acceptance criteria:**
+
 - [ ] All 5 source files ported into `packages/dialog/src/`
 - [ ] `useDialog.tsx` imports `useNonNullableContext` from `@omnireact/core`
 - [ ] `dialog.provider.tsx` imports `useEventCallback` from `@omnireact/core`
 - [ ] `packages/dialog/package.json`: name `@omnireact/dialog`, version `0.0.1`,
       `dependencies: { invariant: "^2.2.4" }`, `devDependencies: { "@types/invariant":
-      "^2.2.37" }`, `peerDependencies: { react: "^19" }`, `dependencies: { "@omnireact/core":
-      "workspace:*" }`, `exports` map, `sideEffects: false`
+    "^2.2.37" }`, `peerDependencies: { react: "^19" }`, `dependencies: { "@omnireact/core":
+    "workspace:*" }`, `exports` map, `sideEffects: false`
 - [ ] `tsup.config.ts`, `vitest.config.ts`, `tsconfig.json` mirroring `packages/core`
 - [ ] Tests: `DialogsProvider` + `useDialogs()` — opening a dialog renders the component
       with the right payload, `close()` resolves the promise returned by `open()` with the
@@ -110,6 +117,7 @@ pattern.
       right template + payload shape
 
 **Verification:**
+
 - [ ] `pnpm --filter @omnireact/dialog test` passes
 - [ ] `pnpm --filter @omnireact/dialog build` succeeds, `dist/` contains ESM+CJS+d.ts
 - [ ] `pnpm -r typecheck` clean across `core` + `dialog` together (catches any type drift
@@ -118,6 +126,7 @@ pattern.
 **Dependencies:** Task 2
 
 **Files likely touched:**
+
 - `packages/dialog/src/**`, `packages/dialog/package.json`,
   `packages/dialog/tsup.config.ts`, `packages/dialog/vitest.config.ts`,
   `packages/dialog/tsconfig.json`
@@ -132,6 +141,7 @@ pattern.
 changelog generation.
 
 **Acceptance criteria:**
+
 - [ ] `.changeset/config.json` — `access: "restricted"` initially (flip to `"public"`
       when actually publishing is decided, out of scope here), `baseBranch: "main"`,
       `updateInternalDependencies: "patch"`
@@ -140,11 +150,13 @@ changelog generation.
 - [ ] `.changeset/README.md` present (from `changeset init`)
 
 **Verification:**
+
 - [ ] `pnpm changeset status` runs without error (reports "no changesets present" is fine)
 
 **Dependencies:** Task 1
 
 **Files likely touched:**
+
 - `.changeset/config.json`, `package.json`
 
 **Estimated scope:** S
@@ -158,6 +170,7 @@ on `@omnireact/dialog` via the workspace, with one MDX page containing a live-re
 demo component (e.g. a button that opens a confirm dialog via `useDialogs()`).
 
 **Acceptance criteria:**
+
 - [ ] `apps/docs/package.json`: `next`, `nextra`, `nextra-theme-docs`,
       `@omnireact/dialog: "workspace:*"`, `@omnireact/core: "workspace:*"`, `react`,
       `react-dom`
@@ -173,6 +186,7 @@ demo component (e.g. a button that opens a confirm dialog via `useDialogs()`).
       `tsc`
 
 **Verification:**
+
 - [ ] `pnpm --filter docs dev` starts the dev server
 - [ ] Manually confirmed in a browser: the dialog demo page opens/closes a confirm
       dialog correctly
@@ -180,6 +194,7 @@ demo component (e.g. a button that opens a confirm dialog via `useDialogs()`).
 **Dependencies:** Task 3
 
 **Files likely touched:**
+
 - `apps/docs/**` (new directory)
 
 **Estimated scope:** M
@@ -193,6 +208,7 @@ API reference) and each package's `README.md` (core + dialog), since Task 5 only
 scaffolds the site and one demo page.
 
 **Acceptance criteria:**
+
 - [ ] `apps/docs/pages/dialog/index.mdx` (or a split `quickstart.mdx` +
       `api-reference.mdx`) covers: install (`pnpm add @omnireact/dialog`), wrapping the
       app in `DialogsProvider` with required `templates`, `useDialogs()` return shape
@@ -204,6 +220,7 @@ scaffolds the site and one demo page.
       usable standalone too
 
 **Verification:**
+
 - [ ] Docs pages render without MDX errors (`pnpm --filter docs build`)
 - [ ] Every code example in the dialog docs is copy-paste valid against the actual
       package API (cross-check against `packages/dialog/src/types.ts`)
@@ -211,6 +228,7 @@ scaffolds the site and one demo page.
 **Dependencies:** Task 5
 
 **Files likely touched:**
+
 - `apps/docs/pages/dialog/**`, `packages/dialog/README.md`, `packages/core/README.md`
 
 **Estimated scope:** S
@@ -227,6 +245,7 @@ verified the same way: headless Chrome click-through, in both light and dark mod
 just a successful build.
 
 **Acceptance criteria:**
+
 - [ ] `tailwindcss` + `@tailwindcss/postcss` (or current Next.js-recommended Tailwind v4
       setup) added to `apps/docs`
 - [ ] A dialog demo component styled entirely with Tailwind utility classes (no inline
@@ -234,6 +253,7 @@ just a successful build.
 - [ ] Embedded live in a docs page (new "Guides" section, see Task 10)
 
 **Verification:**
+
 - [ ] `pnpm --filter docs build` succeeds
 - [ ] Headless Chrome: click the trigger button, assert the dialog appears with expected
       text, in both `prefers-color-scheme: light` and `dark`
@@ -243,6 +263,7 @@ just a successful build.
 **Dependencies:** Task 6
 
 **Files likely touched:**
+
 - `apps/docs/package.json`, `apps/docs/postcss.config.*` or equivalent,
   `apps/docs/content/dialog/**`, a new demo component under `apps/docs/components/`
 
@@ -256,6 +277,7 @@ just a successful build.
 `Button` components, wired to `@omnireact/dialog`'s templates.
 
 **Acceptance criteria:**
+
 - [ ] `@mui/material`, `@emotion/react`, `@emotion/styled` added to `apps/docs`
 - [ ] Emotion SSR cache correctly configured for the Next.js App Router (check current
       official guidance/package — e.g. `@mui/material-nextjs`'s `AppRouterCacheProvider` —
@@ -264,6 +286,7 @@ just a successful build.
 - [ ] Embedded live in a docs page (Task 10's "Guides" section)
 
 **Verification:**
+
 - [ ] `pnpm --filter docs build` succeeds with no SSR/hydration warnings from Emotion in
       the server logs
 - [ ] Headless Chrome: click-through verified same as Task 7, light and dark mode
@@ -271,6 +294,7 @@ just a successful build.
 **Dependencies:** Task 6 (parallelizable with Task 7)
 
 **Files likely touched:**
+
 - `apps/docs/package.json`, `apps/docs/app/layout.tsx` (cache provider),
   `apps/docs/content/dialog/**`, a new demo component
 
@@ -284,6 +308,7 @@ just a successful build.
 `Dialog` component (Radix UI primitive + Tailwind), wired to `@omnireact/dialog`.
 
 **Acceptance criteria:**
+
 - [ ] Run the real `shadcn` CLI (`npx shadcn@latest add dialog` or current equivalent) to
       scaffold the component into `apps/docs` — do **not** hand-write shadcn's component
       source from memory; its conventions (e.g. `data-slot` attributes, exact class names)
@@ -293,12 +318,14 @@ just a successful build.
 - [ ] Embedded live in a docs page (Task 10's "Guides" section)
 
 **Verification:**
+
 - [ ] `pnpm --filter docs build` succeeds
 - [ ] Headless Chrome: click-through verified same as Task 7, light and dark mode
 
 **Dependencies:** Task 7 (needs Tailwind already configured)
 
 **Files likely touched:**
+
 - `apps/docs/components/ui/dialog.tsx` (shadcn-generated), `apps/docs/package.json`,
   `apps/docs/content/dialog/**`, a new demo component
 
@@ -313,15 +340,18 @@ Tailwind/MUI/shadcn demo pages from Tasks 7-9, and replace the "live demos are c
 note in `content/dialog/index.mdx` with real links.
 
 **Acceptance criteria:**
+
 - [ ] `content/_meta.ts` (or a new `content/guides/_meta.ts`) lists all three guide pages
 - [ ] `content/dialog/index.mdx`'s placeholder note replaced with links to the three guides
 
 **Verification:**
+
 - [ ] `pnpm --filter docs build` succeeds; nav renders all three links correctly
 
 **Dependencies:** Tasks 7, 8, 9
 
 **Files likely touched:**
+
 - `apps/docs/content/**`
 
 **Estimated scope:** S

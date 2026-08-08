@@ -56,11 +56,7 @@ function ConfirmDialog({ payload, open, onClose }: DialogProps<ConfirmDialogPayl
   );
 }
 
-function PromptDialog({
-  payload,
-  open,
-  onClose,
-}: DialogProps<PromptDialogPayload, string | null>) {
+function PromptDialog({ payload, open, onClose }: DialogProps<PromptDialogPayload, string | null>) {
   const [value, setValue] = React.useState(payload.defaultValue ?? '');
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose(null)}>
@@ -111,9 +107,7 @@ function RatingDialog({ payload, open, onClose }: DialogProps<ItemPayload, numbe
               onClick={() => setRating(star)}
             >
               <Star
-                className={
-                  star <= rating ? 'fill-primary text-primary' : 'text-muted-foreground'
-                }
+                className={star <= rating ? 'fill-primary text-primary' : 'text-muted-foreground'}
                 size={20}
               />
             </button>
@@ -307,9 +301,9 @@ function DemoButtons() {
           <CardContent className="flex-1">
             <CardTitle>Chaining dialogs with async/await</CardTitle>
             <CardDescription className="mt-1">
-              Each call blocks until its dialog closes, so a multi-step flow — confirm,
-              then prompt, then alert — reads top-to-bottom. No nested callbacks, no extra
-              state for tracking which dialog is currently open.
+              Each call blocks until its dialog closes, so a multi-step flow — confirm, then prompt,
+              then alert — reads top-to-bottom. No nested callbacks, no extra state for tracking
+              which dialog is currently open.
             </CardDescription>
           </CardContent>
           <CardFooter className="mt-auto border-t-0 bg-transparent px-4">
@@ -323,8 +317,8 @@ function DemoButtons() {
           <CardContent className="flex-1">
             <CardTitle>Loading state via async onClose()</CardTitle>
             <CardDescription className="mt-1">
-              onClose runs before the promise resolves — the dialog awaits it itself to
-              show &ldquo;Saving…&rdquo; with no extra state passed in from here.
+              onClose runs before the promise resolves — the dialog awaits it itself to show
+              &ldquo;Saving…&rdquo; with no extra state passed in from here.
             </CardDescription>
           </CardContent>
           <CardFooter className="mt-auto border-t-0 bg-transparent px-4">

@@ -38,9 +38,7 @@ const templates: DialogTemplates = {
 
 function DeleteButton() {
   const { confirm } = useDialogs();
-  return (
-    <button onClick={async () => console.log(await confirm('Delete?'))}>Delete</button>
-  );
+  return <button onClick={async () => console.log(await confirm('Delete?'))}>Delete</button>;
 }
 
 it('opens a confirm dialog and resolves with the chosen result', async () => {
@@ -76,7 +74,7 @@ just a component receiving `DialogProps<P, R>` — render it directly with whate
 render(<ConfirmDeleteDialog payload={{ itemName: 'foo.txt' }} open onClose={vi.fn()} />);
 ```
 
-Only reach for `DialogsProvider` + `useDialogs()` when you're testing the *opening* logic
+Only reach for `DialogsProvider` + `useDialogs()` when you're testing the _opening_ logic
 (the component that calls `open()`/`confirm()`/etc.), not the dialog UI itself.
 
 ## Reference

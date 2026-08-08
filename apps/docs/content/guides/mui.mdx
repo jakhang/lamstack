@@ -379,6 +379,7 @@ with:
       );
     }
     ```
+
   </Tabs.Tab>
 </Tabs>
 
@@ -429,7 +430,9 @@ function RatingDialog({ payload, open, onClose }: DialogProps<ItemPayload, numbe
 function RateButton() {
   const { open } = useDialogs();
   return (
-    <Button onClick={async () => console.log(await open(RatingDialog, { itemName: 'Acme Widget' }))}>
+    <Button
+      onClick={async () => console.log(await open(RatingDialog, { itemName: 'Acme Widget' }))}
+    >
       Rate this
     </Button>
   );

@@ -58,11 +58,7 @@ function ConfirmDialog({ payload, open, onClose }: DialogProps<ConfirmDialogPayl
   );
 }
 
-function PromptDialog({
-  payload,
-  open,
-  onClose,
-}: DialogProps<PromptDialogPayload, string | null>) {
+function PromptDialog({ payload, open, onClose }: DialogProps<PromptDialogPayload, string | null>) {
   const [value, setValue] = React.useState(payload.defaultValue ?? '');
   return (
     <Dialog open={open} onClose={() => onClose(null)}>
@@ -268,7 +264,11 @@ function DemoButtons() {
     <Stack spacing={2}>
       <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
         {actions.map((action) => (
-          <Card key={action.id} variant="outlined" sx={{ display: 'flex', flexDirection: 'column' }}>
+          <Card
+            key={action.id}
+            variant="outlined"
+            sx={{ display: 'flex', flexDirection: 'column' }}
+          >
             <CardContent>
               <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
                 {action.title}
@@ -287,15 +287,18 @@ function DemoButtons() {
       </Box>
 
       <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
-        <Card variant="outlined" sx={{ display: 'flex', flexDirection: 'column', bgcolor: 'action.hover' }}>
+        <Card
+          variant="outlined"
+          sx={{ display: 'flex', flexDirection: 'column', bgcolor: 'action.hover' }}
+        >
           <CardContent sx={{ flexGrow: 1 }}>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
               Chaining dialogs with async/await
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Each call blocks until its dialog closes, so a multi-step flow — confirm,
-              then prompt, then alert — reads top-to-bottom. No nested callbacks, no extra
-              state for tracking which dialog is currently open.
+              Each call blocks until its dialog closes, so a multi-step flow — confirm, then prompt,
+              then alert — reads top-to-bottom. No nested callbacks, no extra state for tracking
+              which dialog is currently open.
             </Typography>
           </CardContent>
           <CardActions sx={{ mt: 'auto' }}>
@@ -305,14 +308,17 @@ function DemoButtons() {
           </CardActions>
         </Card>
 
-        <Card variant="outlined" sx={{ display: 'flex', flexDirection: 'column', bgcolor: 'action.hover' }}>
+        <Card
+          variant="outlined"
+          sx={{ display: 'flex', flexDirection: 'column', bgcolor: 'action.hover' }}
+        >
           <CardContent sx={{ flexGrow: 1 }}>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
               Loading state via async onClose()
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              onClose runs before the promise resolves — the dialog awaits it itself to
-              show &ldquo;Saving…&rdquo; with no extra state passed in from here.
+              onClose runs before the promise resolves — the dialog awaits it itself to show
+              &ldquo;Saving…&rdquo; with no extra state passed in from here.
             </Typography>
           </CardContent>
           <CardActions sx={{ mt: 'auto' }}>

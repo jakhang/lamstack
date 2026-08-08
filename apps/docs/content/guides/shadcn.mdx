@@ -385,11 +385,12 @@ with:
       );
     }
     ```
+
   </Tabs.Tab>
 </Tabs>
 
 Action buttons call `onClose(result)` directly rather than being wrapped in shadcn's
-`<DialogClose>` — that would fire `onOpenChange(false)` *and* the button's own `onClick`,
+`<DialogClose>` — that would fire `onOpenChange(false)` _and_ the button's own `onClick`,
 resolving the promise twice with two different results.
 
 ## A custom (non-template) dialog
@@ -403,7 +404,13 @@ import { Star } from 'lucide-react';
 import { useDialogs } from '@omnireact/dialog';
 import type { DialogProps } from '@omnireact/dialog';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface ItemPayload {
   itemName: string;
@@ -420,7 +427,10 @@ function RatingDialog({ payload, open, onClose }: DialogProps<ItemPayload, numbe
         <div className="flex gap-1">
           {[1, 2, 3, 4, 5].map((star) => (
             <button key={star} onClick={() => setRating(star)}>
-              <Star className={star <= rating ? 'fill-primary text-primary' : 'text-muted-foreground'} size={20} />
+              <Star
+                className={star <= rating ? 'fill-primary text-primary' : 'text-muted-foreground'}
+                size={20}
+              />
             </button>
           ))}
         </div>
@@ -440,7 +450,9 @@ function RatingDialog({ payload, open, onClose }: DialogProps<ItemPayload, numbe
 function RateButton() {
   const { open } = useDialogs();
   return (
-    <Button onClick={async () => console.log(await open(RatingDialog, { itemName: 'Acme Widget' }))}>
+    <Button
+      onClick={async () => console.log(await open(RatingDialog, { itemName: 'Acme Widget' }))}
+    >
       Rate this
     </Button>
   );

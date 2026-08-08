@@ -4,7 +4,7 @@
 
 `open()`, `alert()`, `confirm()`, and `prompt()` all return a `Promise` that resolves once
 the user (or your code) closes the dialog. There's no `isOpen`/`setIsOpen` state to wire up
-yourself — the promise *is* the state machine:
+yourself — the promise _is_ the state machine:
 
 ```tsx
 const ok = await confirm('Delete this item?');
@@ -31,13 +31,13 @@ When a dialog closes, it isn't removed from the React tree immediately. `Dialogs
 first re-renders it with `open={false}` (so your dialog component can play a CSS exit
 transition), then actually removes it from the stack after `unmountAfter` milliseconds
 (default `1000`). Your dialog component is responsible for checking the `open` prop and
-rendering *something* during that window — an exiting animation, or simply `null` if you
+rendering _something_ during that window — an exiting animation, or simply `null` if you
 don't need one.
 
 ## `onClose` timing and error handling
 
 Every `open()`/`alert()`/`confirm()`/`prompt()` call accepts an `onClose` option: an async
-side effect that runs *before* the returned promise resolves and *before* the dialog starts
+side effect that runs _before_ the returned promise resolves and _before_ the dialog starts
 its exit transition.
 
 ```tsx

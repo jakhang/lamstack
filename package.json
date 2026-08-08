@@ -36,5 +36,10 @@
     "vitest": "^4.1.10"
   },
   "keywords": [],
-  "author": "jakhang"
+  "author": "jakhang",
+  "pnpm": {
+    "overrides": {
+      "zod@>=4.4.0": "4.1.12"
+    }
+  }
 }

@@ -1,0 +1,24 @@
+{
+  "name": "docs",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@omnireact/core": "workspace:*",
+    "@omnireact/dialog": "workspace:*",
+    "next": "^16.3.0",
+    "nextra": "^4.6.1",
+    "nextra-theme-docs": "^4.6.1",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@types/mdx": "^2.0.14"
+  }
+}

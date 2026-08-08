@@ -1,0 +1,53 @@
+import { DialogDemo } from '../../components/DialogDemo';
+
+# @omnireact/dialog
+
+Headless, imperative dialog API for React. Wrap your app in `DialogsProvider`, supply the
+components used to render `alert`/`confirm`/`prompt`, then open dialogs from anywhere with
+`useDialogs()`.
+
+```bash
+pnpm add @omnireact/dialog
+```
+
+## Live demo
+
+<DialogDemo />
+
+## Quickstart
+
+```tsx
+import { DialogsProvider, useDialogs } from '@omnireact/dialog';
+import type { DialogTemplates } from '@omnireact/dialog';
+
+const templates: DialogTemplates = {
+  alert: MyAlertDialog,
+  confirm: MyConfirmDialog,
+  prompt: MyPromptDialog,
+};
+
+function App() {
+  return (
+    <DialogsProvider templates={templates}>
+      <DeleteButton />
+    </DialogsProvider>
+  );
+}
+
+function DeleteButton() {
+  const { confirm } = useDialogs();
+
+  return (
+    <button
+      onClick={async () => {
+        const ok = await confirm('Delete this item?', { title: 'Are you sure?' });
+        if (ok) {
+          // ...delete it
+        }
+      }}
+    >
+      Delete
+    </button>
+  );
+}
+```

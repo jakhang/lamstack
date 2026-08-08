@@ -151,7 +151,7 @@ changelog generation.
 
 ---
 
-## Task 5: Nextra docs site scaffold (`apps/docs`) with a live dialog demo
+## Task 5: Nextra docs site scaffold (`apps/docs`) with a live dialog demo — DONE (see commit for the two real build blockers hit and fixed: missing @types/mdx, and a zod 4.4.x + nextra-theme-docs prerendering bug worked around via pnpm.overrides)
 
 **Description:** Scaffold a Nextra (Next.js + MDX) site under `apps/docs` that depends
 on `@omnireact/dialog` via the workspace, with one MDX page containing a live-rendered

@@ -88,7 +88,7 @@ Import rewrites needed when porting `dialog`:
 
 ### Phase 5: Docs
 
-- [ ] Task 5: Nextra docs site scaffold (`apps/docs`) with a live dialog demo
+- [x] Task 5: Nextra docs site scaffold (`apps/docs`) with a live dialog demo
 - [ ] Task 6: `@omnireact/dialog` docs content (quickstart + API reference) and package
       `README.md`
 

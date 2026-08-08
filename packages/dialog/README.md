@@ -1,20 +1,17 @@
-import { DialogDemo } from '../../components/DialogDemo';
-
 # @omnireact/dialog
 
-Headless, imperative dialog API for React. Wrap your app in `DialogsProvider`, supply the
-components used to render `alert`/`confirm`/`prompt`, then open dialogs from anywhere with
-`useDialogs()`.
+Headless, imperative dialog API for React — `useDialogs()` gives you `open`, `close`,
+`alert`, `confirm`, and `prompt`, all promise-based. You bring the actual dialog
+components (whatever UI library you use); this package handles the stack, the imperative
+`open()`/`close()` plumbing, and the `Promise<result>` semantics.
+
+## Install
 
 ```bash
 pnpm add @omnireact/dialog
 ```
 
-## Live demo
-
-<DialogDemo />
-
-## Quickstart
+## Usage
 
 ```tsx
 import { DialogsProvider, useDialogs } from '@omnireact/dialog';
@@ -52,5 +49,9 @@ function DeleteButton() {
 }
 ```
 
-See the [API reference](/dialog/api-reference) for the full `useDialogs()` surface,
-`DialogsProvider` props, and how to open your own custom dialog components.
+Full docs, live demo, and API reference: [omnireact docs](../../apps/docs) (or the
+published docs site once deployed).
+
+## License
+
+MIT

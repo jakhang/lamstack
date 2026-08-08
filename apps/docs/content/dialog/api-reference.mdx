@@ -1,0 +1,122 @@
+# API Reference
+
+## `<DialogsProvider>`
+
+Renders the currently-open dialog stack and provides the imperative API consumed by
+`useDialogs()`. Mount it once, near the root of your app.
+
+```tsx
+import { DialogsProvider } from '@omnireact/dialog';
+import type { DialogTemplates } from '@omnireact/dialog';
+
+const templates: DialogTemplates = {
+  alert: MyAlertDialog,
+  confirm: MyConfirmDialog,
+  prompt: MyPromptDialog,
+};
+
+<DialogsProvider templates={templates} unmountAfter={1000}>
+  <App />
+</DialogsProvider>;
+```
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `templates` | `DialogTemplates` | Required. Components used to render `alert`/`confirm`/`prompt`. |
+| `unmountAfter` | `number` | Delay (ms) before a closed dialog is removed from the DOM, so it can play an exit animation. Defaults to `1000`. |
+| `children` | `ReactNode` | Your app. |
+
+## `useDialogs()`
+
+Must be called from a component rendered under `<DialogsProvider>`.
+
+```tsx
+const { open, close, alert, confirm, prompt } = useDialogs();
+```
+
+| Member | Signature | Description |
+| --- | --- | --- |
+| `open` | `(Component, payload?, options?) => Promise<R>` | Opens any component satisfying `DialogComponent<P, R>`. Resolves with whatever `R` the dialog closes with. |
+| `close` | `(dialogPromise, result) => Promise<R>` | Closes a dialog by the promise `open()` returned for it. Rarely needed directly — dialogs close themselves via their `onClose` prop. |
+| `alert` | `(msg, options?: AlertOptions) => Promise<void>` | Opens the `templates.alert` component. Resolves once acknowledged. |
+| `confirm` | `(msg, options?: ConfirmOptions) => Promise<boolean>` | Opens `templates.confirm`. Resolves `true`/`false`. |
+| `prompt` | `(msg, options?: PromptOptions) => Promise<string \| null>` | Opens `templates.prompt`. Resolves the entered value, or `null` if cancelled. |
+
+`AlertOptions`/`ConfirmOptions`/`PromptOptions` all accept an optional `onClose` — an async
+side effect (e.g. an API call) that runs *before* the returned promise resolves and the
+dialog unmounts. If it throws, the dialog still closes and the promise still resolves; the
+error is logged via `console.error` instead of becoming an unhandled rejection.
+
+## `DialogProps<P, R>`
+
+Every dialog component (your custom ones, and the three referenced by `DialogTemplates`)
+receives these props:
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `payload` | `P` | The data passed as `open(Component, payload)`. |
+| `open` | `boolean` | Whether the dialog is currently open (`false` during its exit animation). |
+| `onClose` | `(result: R) => Promise<void>` | Call this to close the dialog with a result. |
+
+## Custom dialogs
+
+Any component matching `DialogComponent<P, R>` can be opened with `open()` — it isn't
+limited to the three built-in templates.
+
+```tsx
+import type { DialogProps } from '@omnireact/dialog';
+
+interface ConfirmDeletePayload {
+  itemName: string;
+}
+
+function ConfirmDeleteDialog({
+  payload,
+  open,
+  onClose,
+}: DialogProps<ConfirmDeletePayload, boolean>) {
+  if (!open) return null;
+  return (
+    <div role="alertdialog">
+      <p>Delete “{payload.itemName}”?</p>
+      <button onClick={() => onClose(false)}>Cancel</button>
+      <button onClick={() => onClose(true)}>Delete</button>
+    </div>
+  );
+}
+
+function DeleteButton({ itemName }: { itemName: string }) {
+  const { open } = useDialogs();
+
+  return (
+    <button
+      onClick={async () => {
+        const confirmed = await open(ConfirmDeleteDialog, { itemName });
+        if (confirmed) {
+          // ...delete it
+        }
+      }}
+    >
+      Delete
+    </button>
+  );
+}
+```
+
+## `DialogTemplates`
+
+The shape `DialogsProvider` expects for its `templates` prop — one component per built-in
+dialog kind:
+
+```ts
+interface DialogTemplates {
+  alert: React.ComponentType<DialogProps<AlertDialogPayload, void>>;
+  confirm: React.ComponentType<DialogProps<ConfirmDialogPayload, boolean>>;
+  prompt: React.ComponentType<DialogProps<PromptDialogPayload, string | null>>;
+}
+```
+
+`AlertDialogPayload`/`ConfirmDialogPayload`/`PromptDialogPayload` all extend their
+respective `*Options` type with a `msg: ReactNode` field — so `payload.title`,
+`payload.okText`, etc. are available alongside `payload.msg` inside the template
+component.

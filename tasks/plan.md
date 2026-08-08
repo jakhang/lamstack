@@ -89,14 +89,14 @@ Import rewrites needed when porting `dialog`:
 ### Phase 5: Docs
 
 - [x] Task 5: Nextra docs site scaffold (`apps/docs`) with a live dialog demo
-- [ ] Task 6: `@omnireact/dialog` docs content (quickstart + API reference) and package
+- [x] Task 6: `@omnireact/dialog` docs content (quickstart + API reference) and package
       `README.md`
 
 ### Checkpoint: Complete
-- [ ] `pnpm -r build` succeeds for all packages
-- [ ] `pnpm -r test` passes for all packages
-- [ ] `pnpm --filter docs dev` serves the docs site with a working live dialog demo
-- [ ] Root `README.md`, `LICENSE` (MIT), and per-package `README.md` exist
+- [x] `pnpm -r build` succeeds for all packages (verified together, correct dependency order: core → dialog → docs)
+- [x] `pnpm -r test` passes for all packages
+- [x] `pnpm --filter docs dev`/`build`+`start` serves the docs site with a working live dialog demo (build+start verified; interactive click-through not verified in an actual browser — no browser automation tool was available)
+- [x] Root `README.md`, `LICENSE` (MIT), and per-package `README.md` exist
 
 ## Risks and Mitigations
 

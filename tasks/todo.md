@@ -186,7 +186,7 @@ demo component (e.g. a button that opens a confirm dialog via `useDialogs()`).
 
 ---
 
-## Task 6: `@omnireact/dialog` docs content + package README
+## Task 6: `@omnireact/dialog` docs content + package README — DONE
 
 **Description:** Write the actual docs content for the dialog package (quickstart +
 API reference) and each package's `README.md` (core + dialog), since Task 5 only

@@ -1,0 +1,26 @@
+{
+  "name": "omnireact",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@10.27.0",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,md,mdx,json}\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.9.0",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.66.0"
+  },
+  "keywords": [],
+  "author": "jakhang"
+}

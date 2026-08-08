@@ -16,11 +16,18 @@
     "@mui/material-nextjs": "^9.3.0",
     "@omnireact/core": "workspace:*",
     "@omnireact/dialog": "workspace:*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.30.0",
     "next": "^16.3.0",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
+    "radix-ui": "^1.6.7",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "shadcn": "^4.16.2",
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

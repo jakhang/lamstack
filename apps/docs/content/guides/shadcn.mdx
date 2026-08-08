@@ -1,0 +1,78 @@
+import { ShadcnDialogDemo } from '../../components/shadcn-dialog-demo';
+
+# shadcn/ui
+
+Wire `@omnireact/dialog`'s templates to shadcn/ui's `Dialog` (a styled wrapper around
+Radix UI's dialog primitive). The component below was generated with the real `shadcn`
+CLI (`npx shadcn@latest add dialog`) — its exact markup/class names come from the
+registry, not hand-written from memory.
+
+## Live demo
+
+<ShadcnDialogDemo />
+
+## Templates
+
+```tsx
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import type { ConfirmDialogPayload, DialogProps } from '@omnireact/dialog';
+
+function ConfirmDialog({ payload, open, onClose }: DialogProps<ConfirmDialogPayload, boolean>) {
+  return (
+    // shadcn's <Dialog> is controlled via open/onOpenChange (Radix convention), not
+    // @omnireact/dialog's onClose(result) shape — map dismissal (Escape/outside click)
+    // to a sensible default result, same idea as the MUI guide.
+    <Dialog open={open} onOpenChange={(next) => !next && onClose(false)}>
+      <DialogContent>
+        <DialogHeader>
+          {payload.title ? <DialogTitle>{payload.title}</DialogTitle> : null}
+          <DialogDescription>{payload.msg}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onClose(false)}>
+            {payload.cancelText ?? 'Cancel'}
+          </Button>
+          <Button onClick={() => onClose(true)}>{payload.okText ?? 'OK'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+Action buttons call `onClose(result)` directly rather than being wrapped in shadcn's
+`<DialogClose>` — that would fire `onOpenChange(false)` *and* the button's own `onClick`,
+resolving the promise twice with two different results.
+
+## Setup
+
+```bash
+npx shadcn@latest init
+npx shadcn@latest add dialog
+```
+
+The CLI needs a resolvable import alias (`@/*`) in `tsconfig.json` — if it fails with
+"Could not find valid path aliases", add one:
+
+```json
+{
+  "compilerOptions": {
+    "paths": { "@/*": ["./*"] }
+  }
+}
+```
+
+## Dark mode
+
+shadcn's generated `tailwind.css` defines `:root` and `.dark` CSS variable blocks (colors
+as `oklch()` values) — it already assumes class-based dark mode, matching this docs site's
+`.dark` class toggle with no extra configuration needed (unlike the [MUI guide](/guides/mui),
+which needed `colorSchemeSelector: 'class'` set explicitly).

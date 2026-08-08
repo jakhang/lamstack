@@ -281,31 +281,31 @@ function DemoButtons() {
         return `open(RatingDialog) → ${JSON.stringify(rating)}`;
       },
     },
-    {
-      id: 'loading',
-      title: 'async onClose()',
-      description:
-        'onClose runs before the promise resolves — the dialog awaits it to show "Saving…" with no extra state.',
-      run: async () => {
-        const start = Date.now();
-        const saved = await open(
-          SaveDialog,
-          { itemName: 'Acme Widget' },
-          {
-            onClose: async () => {
-              await new Promise((resolve) => setTimeout(resolve, 1200));
-            },
-          },
-        );
-        return `open(SaveDialog) → saved=${saved} (${Date.now() - start}ms)`;
-      },
-    },
   ];
 
   async function runAction(action: DemoAction) {
     setBusy(true);
     try {
       record(await action.run());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runLoadingExample() {
+    setBusy(true);
+    try {
+      const start = Date.now();
+      const saved = await open(
+        SaveDialog,
+        { itemName: 'Acme Widget' },
+        {
+          onClose: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+          },
+        },
+      );
+      record(`open(SaveDialog) → saved=${saved} (${Date.now() - start}ms)`);
     } finally {
       setBusy(false);
     }
@@ -340,18 +340,37 @@ function DemoButtons() {
         ))}
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
-        <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
-          Chaining dialogs with async/await
-        </p>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          Each call blocks until its dialog closes, so a multi-step flow — confirm, then
-          prompt, then alert — reads top-to-bottom. No nested callbacks, no extra state for
-          tracking which dialog is currently open.
-        </p>
-        <PrimaryButton className="mt-3" disabled={busy} onClick={runChainedFlow}>
-          Run guided flow
-        </PrimaryButton>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="flex flex-col justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
+          <div>
+            <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+              Chaining dialogs with async/await
+            </p>
+            <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+              Each call blocks until its dialog closes, so a multi-step flow — confirm,
+              then prompt, then alert — reads top-to-bottom. No nested callbacks, no extra
+              state for tracking which dialog is currently open.
+            </p>
+          </div>
+          <PrimaryButton className="self-start" disabled={busy} onClick={runChainedFlow}>
+            Run guided flow
+          </PrimaryButton>
+        </div>
+
+        <div className="flex flex-col justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
+          <div>
+            <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+              Loading state via async onClose()
+            </p>
+            <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+              onClose runs before the promise resolves — the dialog awaits it itself to
+              show &quot;Saving…&quot; with no extra state passed in from here.
+            </p>
+          </div>
+          <PrimaryButton className="self-start" disabled={busy} onClick={runLoadingExample}>
+            Run loading example
+          </PrimaryButton>
+        </div>
       </div>
 
       {log.length > 0 ? (

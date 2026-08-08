@@ -264,31 +264,31 @@ with:
             return `open(RatingDialog) → ${JSON.stringify(rating)}`;
           },
         },
-        {
-          id: 'loading',
-          title: 'async onClose()',
-          description:
-            'onClose runs before the promise resolves — the dialog awaits it to show "Saving…" with no extra state.',
-          run: async () => {
-            const start = Date.now();
-            const saved = await open(
-              SaveDialog,
-              { itemName: 'Acme Widget' },
-              {
-                onClose: async () => {
-                  await new Promise((resolve) => setTimeout(resolve, 1200));
-                },
-              },
-            );
-            return `open(SaveDialog) → saved=${saved} (${Date.now() - start}ms)`;
-          },
-        },
       ];
 
       async function runAction(action: DemoAction) {
         setBusy(true);
         try {
           record(await action.run());
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function runLoadingExample() {
+        setBusy(true);
+        try {
+          const start = Date.now();
+          const saved = await open(
+            SaveDialog,
+            { itemName: 'Acme Widget' },
+            {
+              onClose: async () => {
+                await new Promise((resolve) => setTimeout(resolve, 1200));
+              },
+            },
+          );
+          record(`open(SaveDialog) → saved=${saved} (${Date.now() - start}ms)`);
         } finally {
           setBusy(false);
         }
@@ -333,19 +333,38 @@ with:
             ))}
           </div>
 
-          <Card size="sm" className="bg-muted/30">
-            <CardContent>
-              <CardTitle>Chaining dialogs with async/await</CardTitle>
-              <CardDescription className="mt-1">
-                Each call blocks until its dialog closes, so a multi-step flow — confirm, then
-                prompt, then alert — reads top-to-bottom. No nested callbacks, no extra state
-                for tracking which dialog is currently open.
-              </CardDescription>
-              <Button className="mt-3" disabled={busy} onClick={runChainedFlow}>
-                Run guided flow
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Card size="sm" className="flex flex-col bg-muted/30">
+              <CardContent className="flex-1">
+                <CardTitle>Chaining dialogs with async/await</CardTitle>
+                <CardDescription className="mt-1">
+                  Each call blocks until its dialog closes, so a multi-step flow — confirm,
+                  then prompt, then alert — reads top-to-bottom. No nested callbacks, no
+                  extra state for tracking which dialog is currently open.
+                </CardDescription>
+              </CardContent>
+              <CardFooter className="mt-auto border-t-0 bg-transparent p-0 px-4">
+                <Button disabled={busy} onClick={runChainedFlow}>
+                  Run guided flow
+                </Button>
+              </CardFooter>
+            </Card>
+
+            <Card size="sm" className="flex flex-col bg-muted/30">
+              <CardContent className="flex-1">
+                <CardTitle>Loading state via async onClose()</CardTitle>
+                <CardDescription className="mt-1">
+                  onClose runs before the promise resolves — the dialog awaits it itself to
+                  show &ldquo;Saving…&rdquo; with no extra state passed in from here.
+                </CardDescription>
+              </CardContent>
+              <CardFooter className="mt-auto border-t-0 bg-transparent p-0 px-4">
+                <Button disabled={busy} onClick={runLoadingExample}>
+                  Run loading example
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
 
           {log.length > 0 ? (
             <div className="w-full space-y-1 rounded-lg border bg-muted/30 p-3 font-mono text-xs text-muted-foreground">

@@ -213,31 +213,31 @@ function DemoButtons() {
         return `open(RatingDialog) → ${JSON.stringify(rating)}`;
       },
     },
-    {
-      id: 'loading',
-      title: 'async onClose()',
-      description:
-        'onClose runs before the promise resolves — the dialog awaits it to show "Saving…" with no extra state.',
-      run: async () => {
-        const start = Date.now();
-        const saved = await open(
-          SaveDialog,
-          { itemName: 'Acme Widget' },
-          {
-            onClose: async () => {
-              await new Promise((resolve) => setTimeout(resolve, 1200));
-            },
-          },
-        );
-        return `open(SaveDialog) → saved=${saved} (${Date.now() - start}ms)`;
-      },
-    },
   ];
 
   async function runAction(action: DemoAction) {
     setBusy(true);
     try {
       record(await action.run());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runLoadingExample() {
+    setBusy(true);
+    try {
+      const start = Date.now();
+      const saved = await open(
+        SaveDialog,
+        { itemName: 'Acme Widget' },
+        {
+          onClose: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+          },
+        },
+      );
+      record(`open(SaveDialog) → saved=${saved} (${Date.now() - start}ms)`);
     } finally {
       setBusy(false);
     }
@@ -286,21 +286,42 @@ function DemoButtons() {
         ))}
       </Box>
 
-      <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
-        <CardContent>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            Chaining dialogs with async/await
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Each call blocks until its dialog closes, so a multi-step flow — confirm, then
-            prompt, then alert — reads top-to-bottom. No nested callbacks, no extra state
-            for tracking which dialog is currently open.
-          </Typography>
-          <Button sx={{ mt: 1.5 }} variant="contained" disabled={busy} onClick={runChainedFlow}>
-            Run guided flow
-          </Button>
-        </CardContent>
-      </Card>
+      <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+        <Card variant="outlined" sx={{ display: 'flex', flexDirection: 'column', bgcolor: 'action.hover' }}>
+          <CardContent sx={{ flexGrow: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              Chaining dialogs with async/await
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Each call blocks until its dialog closes, so a multi-step flow — confirm,
+              then prompt, then alert — reads top-to-bottom. No nested callbacks, no extra
+              state for tracking which dialog is currently open.
+            </Typography>
+          </CardContent>
+          <CardActions sx={{ mt: 'auto' }}>
+            <Button variant="contained" disabled={busy} onClick={runChainedFlow}>
+              Run guided flow
+            </Button>
+          </CardActions>
+        </Card>
+
+        <Card variant="outlined" sx={{ display: 'flex', flexDirection: 'column', bgcolor: 'action.hover' }}>
+          <CardContent sx={{ flexGrow: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              Loading state via async onClose()
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              onClose runs before the promise resolves — the dialog awaits it itself to
+              show &ldquo;Saving…&rdquo; with no extra state passed in from here.
+            </Typography>
+          </CardContent>
+          <CardActions sx={{ mt: 'auto' }}>
+            <Button variant="contained" disabled={busy} onClick={runLoadingExample}>
+              Run loading example
+            </Button>
+          </CardActions>
+        </Card>
+      </Box>
 
       {log.length > 0 ? (
         <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>

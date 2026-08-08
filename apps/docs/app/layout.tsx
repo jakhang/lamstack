@@ -35,6 +35,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               footer={<Footer>MIT {new Date().getFullYear()} © jakhang.</Footer>}
               docsRepositoryBase="https://github.com/jakhang/omnireact/tree/main/apps/docs"
               pageMap={pageMap}
+              toc={{ backToTop: false }}
             >
               {children}
             </Layout>

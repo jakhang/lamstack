@@ -1,6 +1,6 @@
 {
   "name": "@omnireact/core",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Shared internal hooks used across omnireact packages.",
   "keywords": [
     "react",

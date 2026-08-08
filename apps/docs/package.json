@@ -10,6 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^9.3.1",
+    "@mui/material-nextjs": "^9.3.0",
     "@omnireact/core": "workspace:*",
     "@omnireact/dialog": "workspace:*",
     "next": "^16.3.0",

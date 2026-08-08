@@ -114,7 +114,7 @@ success):
 - [x] Task 8: MUI demo — add `@mui/material`, `@emotion/react`, `@emotion/styled`, and
       `@mui/material-nextjs` (for the Next.js App Router Emotion SSR cache), build a dialog
       demo using MUI `Dialog`/`Button`, verify interactively.
-- [ ] Task 9: shadcn/ui demo — set up Tailwind (shared with Task 7) + run the actual
+- [x] Task 9: shadcn/ui demo — set up Tailwind (shared with Task 7) + run the actual
       `shadcn` CLI to scaffold its real `Dialog` component (don't hand-write it from
       memory — component source/conventions change between shadcn versions), wire it to
       `@omnireact/dialog`'s templates, verify interactively.

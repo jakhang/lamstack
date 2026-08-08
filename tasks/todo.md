@@ -278,7 +278,7 @@ just a successful build.
 
 ---
 
-## Task 9: shadcn/ui live demo
+## Task 9: shadcn/ui live demo — DONE
 
 **Description:** Add a real, verified-interactive dialog demo using shadcn/ui's actual
 `Dialog` component (Radix UI primitive + Tailwind), wired to `@omnireact/dialog`.

@@ -1,0 +1,82 @@
+# Concepts
+
+## Promise-based, not state-based
+
+`open()`, `alert()`, `confirm()`, and `prompt()` all return a `Promise` that resolves once
+the user (or your code) closes the dialog. There's no `isOpen`/`setIsOpen` state to wire up
+yourself — the promise *is* the state machine:
+
+```tsx
+const ok = await confirm('Delete this item?');
+// execution pauses here until the dialog closes
+if (ok) {
+  await deleteItem();
+}
+```
+
+This is the same model as the browser's built-in `window.confirm()`, except non-blocking,
+fully typed, and backed by whatever dialog UI you provide instead of a native browser popup.
+
+## The dialog stack
+
+`DialogsProvider` keeps an internal stack of every currently-open (or closing) dialog.
+Calling `open()`/`alert()`/`confirm()`/`prompt()` multiple times — even for the same
+component — pushes a new, independent entry: each has its own payload, its own promise,
+and resolves independently of the others. Nothing about the API assumes only one dialog
+is open at a time.
+
+## Exit animations and `unmountAfter`
+
+When a dialog closes, it isn't removed from the React tree immediately. `DialogsProvider`
+first re-renders it with `open={false}` (so your dialog component can play a CSS exit
+transition), then actually removes it from the stack after `unmountAfter` milliseconds
+(default `1000`). Your dialog component is responsible for checking the `open` prop and
+rendering *something* during that window — an exiting animation, or simply `null` if you
+don't need one.
+
+## `onClose` timing and error handling
+
+Every `open()`/`alert()`/`confirm()`/`prompt()` call accepts an `onClose` option: an async
+side effect that runs *before* the returned promise resolves and *before* the dialog starts
+its exit transition.
+
+```tsx
+await confirm('Delete this item?', {
+  onClose: async (confirmed) => {
+    if (confirmed) {
+      await api.deleteItem(id); // dialog stays open, awaiting this
+    }
+  },
+});
+// only reaches here after onClose has fully settled
+```
+
+This is useful for showing a loading state inside the dialog itself while an API call is
+in flight, without needing separate state for it.
+
+If `onClose` throws, the dialog **still closes and the promise still resolves** with the
+result the user picked — a failing side effect doesn't trap the UI in an open state. The
+error is logged via `console.error` rather than silently swallowed or left as an unhandled
+promise rejection.
+
+## Headless by design
+
+None of `@omnireact/dialog`'s own code renders any markup. `DialogsProvider` only manages
+state and timing; the actual `<div>`s, buttons, and styling come entirely from the
+`templates` you pass in (for `alert`/`confirm`/`prompt`) or the components you pass to
+`open()` directly (for anything custom). This means the package has zero opinion on — and
+zero dependency on — Tailwind, MUI, shadcn/ui, or any other styling approach; all three are
+equally well supported because none of them are special-cased.
+
+## Client-only (`"use client"`)
+
+`DialogsProvider` and `useDialogs()` both use React state and context, so they're marked
+`"use client"` internally. In a Next.js App Router (or any React Server Components) app,
+mount `DialogsProvider` from a Client Component boundary — typically near the root of your
+app's client-side layout, not directly inside a Server Component.
+
+## Prior art
+
+The API is intentionally close to [`@toolpad/core`'s `useDialogs`](https://mui.com/toolpad/core/react-use-dialogs/)
+— if you've used that, this should feel familiar. `@omnireact/dialog` is a standalone,
+headless extraction of the same pattern with no MUI dependency.

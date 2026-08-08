@@ -1,0 +1,87 @@
+# Testing
+
+Components that call `useDialogs()` need a `DialogsProvider` ancestor and `templates` to
+render against. The recommended approach is minimal fake templates that render just enough
+markup to interact with in a test — you don't need your real dialog UI to test the logic
+that opens/closes it.
+
+```tsx
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { DialogsProvider, useDialogs } from '@omnireact/dialog';
+import type { DialogTemplates } from '@omnireact/dialog';
+
+const templates: DialogTemplates = {
+  alert: ({ payload, open, onClose }) =>
+    !open ? null : (
+      <div role="alertdialog">
+        <span>{payload.msg}</span>
+        <button onClick={() => onClose()}>ok</button>
+      </div>
+    ),
+  confirm: ({ payload, open, onClose }) =>
+    !open ? null : (
+      <div role="alertdialog">
+        <span>{payload.msg}</span>
+        <button onClick={() => onClose(true)}>yes</button>
+        <button onClick={() => onClose(false)}>no</button>
+      </div>
+    ),
+  prompt: ({ payload, open, onClose }) =>
+    !open ? null : (
+      <div role="alertdialog">
+        <span>{payload.msg}</span>
+        <button onClick={() => onClose('typed value')}>submit</button>
+      </div>
+    ),
+};
+
+function DeleteButton() {
+  const { confirm } = useDialogs();
+  return (
+    <button onClick={async () => console.log(await confirm('Delete?'))}>Delete</button>
+  );
+}
+
+it('opens a confirm dialog and resolves with the chosen result', async () => {
+  render(
+    <DialogsProvider templates={templates}>
+      <DeleteButton />
+    </DialogsProvider>,
+  );
+
+  fireEvent.click(screen.getByText('Delete'));
+  expect(screen.getByText('Delete?')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('yes'));
+  await waitFor(() => expect(screen.queryByText('Delete?')).not.toBeInTheDocument());
+});
+```
+
+## Why `waitFor`
+
+`open()`'s promise resolves asynchronously (it goes through `onClose`, then `resolve()`,
+then the exit-animation `setTimeout`). Assertions that depend on the dialog having fully
+closed — or on state your component sets after the awaited call — need `waitFor` (or an
+`await act(async () => {...})` around anything that advances timers), not a synchronous
+assertion immediately after `fireEvent.click`.
+
+## Testing custom dialogs directly
+
+A custom dialog component (one you pass to `open()` rather than through `templates`) is
+just a component receiving `DialogProps<P, R>` — render it directly with whatever
+`payload`/`open`/`onClose` you want to test, no `DialogsProvider` required:
+
+```tsx
+render(<ConfirmDeleteDialog payload={{ itemName: 'foo.txt' }} open onClose={vi.fn()} />);
+```
+
+Only reach for `DialogsProvider` + `useDialogs()` when you're testing the *opening* logic
+(the component that calls `open()`/`confirm()`/etc.), not the dialog UI itself.
+
+## Reference
+
+`@omnireact/dialog`'s own test suite
+([`packages/dialog/src/dialog.test.tsx`](https://github.com/jakhang/omnireact/blob/main/packages/dialog/src/dialog.test.tsx))
+uses exactly this pattern and additionally covers `onClose` timing/error semantics — worth
+reading if you need to test those edge cases in your own app.

@@ -111,7 +111,7 @@ success):
 - [x] Task 7: Tailwind CSS demo — add `tailwindcss`/`@tailwindcss/postcss` to `apps/docs`,
       build a dialog demo styled with Tailwind utility classes, verify interactively
       (headless Chrome click-through, light AND dark mode).
-- [ ] Task 8: MUI demo — add `@mui/material`, `@emotion/react`, `@emotion/styled`, and
+- [x] Task 8: MUI demo — add `@mui/material`, `@emotion/react`, `@emotion/styled`, and
       `@mui/material-nextjs` (for the Next.js App Router Emotion SSR cache), build a dialog
       demo using MUI `Dialog`/`Button`, verify interactively.
 - [ ] Task 9: shadcn/ui demo — set up Tailwind (shared with Task 7) + run the actual

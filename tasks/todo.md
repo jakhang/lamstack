@@ -250,7 +250,7 @@ just a successful build.
 
 ---
 
-## Task 8: MUI live demo
+## Task 8: MUI live demo — DONE
 
 **Description:** Add a real, verified-interactive dialog demo built with MUI's `Dialog`/
 `Button` components, wired to `@omnireact/dialog`'s templates.

@@ -126,7 +126,7 @@ pattern.
 
 ---
 
-## Task 4: Changesets setup
+## Task 4: Changesets setup — DONE
 
 **Description:** Add Changesets at the root for independent per-package versioning and
 changelog generation.

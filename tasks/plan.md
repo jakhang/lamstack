@@ -84,7 +84,7 @@ Import rewrites needed when porting `dialog`:
 
 ### Phase 4: Versioning
 
-- [ ] Task 4: Changesets setup
+- [x] Task 4: Changesets setup
 
 ### Phase 5: Docs
 

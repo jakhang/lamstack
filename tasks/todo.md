@@ -43,7 +43,7 @@ root `package.json` with workspace scripts, and `pnpm-workspace.yaml` covering
 
 ---
 
-## Task 2: `@omnireact/core` — port hooks, build, test
+## Task 2: `@omnireact/core` — port hooks, build, test — DONE
 
 **Description:** Create `packages/core`, port `useEventCallback`,
 `useNonNullableContext`, and `useIsomorphicLayoutEffect` from

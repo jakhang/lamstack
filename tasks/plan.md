@@ -67,11 +67,11 @@ Import rewrites needed when porting `dialog`:
 
 ### Phase 2: Core package
 
-- [ ] Task 2: `@omnireact/core` — port hooks, build, test
+- [x] Task 2: `@omnireact/core` — port hooks, build, test
 
 ### Checkpoint: Core
-- [ ] `pnpm --filter @omnireact/core build` succeeds, emits ESM+CJS+d.ts
-- [ ] `pnpm --filter @omnireact/core test` passes
+- [x] `pnpm --filter @omnireact/core build` succeeds, emits ESM+CJS+d.ts
+- [x] `pnpm --filter @omnireact/core test` passes
 
 ### Phase 3: Dialog package
 

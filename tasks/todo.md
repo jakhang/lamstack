@@ -84,7 +84,7 @@ logic changes), set up its `package.json`, `tsup.config.ts`, `vitest.config.ts`,
 
 ---
 
-## Task 3: `@omnireact/dialog` — port dialog code, depend on core, build, test
+## Task 3: `@omnireact/dialog` — port dialog code, depend on core, build, test — DONE
 
 **Description:** Create `packages/dialog`, port `dialog.context.ts`,
 `dialog.provider.tsx`, `useDialog.tsx`, `types.ts`, `index.ts` from

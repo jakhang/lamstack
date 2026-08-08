@@ -75,12 +75,12 @@ Import rewrites needed when porting `dialog`:
 
 ### Phase 3: Dialog package
 
-- [ ] Task 3: `@omnireact/dialog` — port dialog code, depend on core, build, test
+- [x] Task 3: `@omnireact/dialog` — port dialog code, depend on core, build, test
 
 ### Checkpoint: Dialog
-- [ ] `pnpm --filter @omnireact/dialog build` succeeds
-- [ ] `pnpm --filter @omnireact/dialog test` passes
-- [ ] `pnpm -r typecheck` clean across both packages
+- [x] `pnpm --filter @omnireact/dialog build` succeeds
+- [x] `pnpm --filter @omnireact/dialog test` passes
+- [x] `pnpm -r typecheck` clean across both packages
 
 ### Phase 4: Versioning
 

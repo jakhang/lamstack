@@ -98,6 +98,29 @@ Import rewrites needed when porting `dialog`:
 - [x] `pnpm --filter docs dev`/`build`+`start` serves the docs site with a working live dialog demo (build+start verified; interactive click-through not verified in an actual browser — no browser automation tool was available)
 - [x] Root `README.md`, `LICENSE` (MIT), and per-package `README.md` exist
 
+### Phase 6: Real live demos (follow-up, requested after Phase 5 shipped)
+
+The Phase 5 live demo (plain inline-style `DialogDemo`) had real bugs — a made-up
+`--nextra-bg` CSS variable and no real dark-mode contrast handling — caught by driving it
+with a headless Chrome instance, not by inspection. It was removed rather than patched.
+User decision: prioritize finishing full-feature docs content first (done above — Concepts
++ Testing pages), then come back and build **real, dependency-backed** live demos, one per
+popular styling approach, each verified the same way (headless Chrome, not just build
+success):
+
+- [ ] Task 7: Tailwind CSS demo — add `tailwindcss`/`@tailwindcss/postcss` to `apps/docs`,
+      build a dialog demo styled with Tailwind utility classes, verify interactively
+      (headless Chrome click-through, light AND dark mode).
+- [ ] Task 8: MUI demo — add `@mui/material`, `@emotion/react`, `@emotion/styled`, and
+      `@mui/material-nextjs` (for the Next.js App Router Emotion SSR cache), build a dialog
+      demo using MUI `Dialog`/`Button`, verify interactively.
+- [ ] Task 9: shadcn/ui demo — set up Tailwind (shared with Task 7) + run the actual
+      `shadcn` CLI to scaffold its real `Dialog` component (don't hand-write it from
+      memory — component source/conventions change between shadcn versions), wire it to
+      `@omnireact/dialog`'s templates, verify interactively.
+- [ ] Task 10: Docs nav — add a "Guides" or "Recipes" section linking all three, replacing
+      the "coming soon" note in `content/dialog/index.mdx`.
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |

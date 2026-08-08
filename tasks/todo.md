@@ -214,3 +214,114 @@ scaffolds the site and one demo page.
 - `apps/docs/pages/dialog/**`, `packages/dialog/README.md`, `packages/core/README.md`
 
 **Estimated scope:** S
+
+---
+
+## Task 7: Tailwind CSS live demo
+
+**Description:** Add a real, verified-interactive dialog demo styled with Tailwind CSS.
+The earlier generic inline-style demo (removed) had real bugs — a made-up `--nextra-bg`
+CSS variable and no dark-mode contrast handling — that only surfaced when actually driven
+with a headless browser, not from code review. This task and Tasks 8-9 must each be
+verified the same way: headless Chrome click-through, in both light and dark mode, not
+just a successful build.
+
+**Acceptance criteria:**
+- [ ] `tailwindcss` + `@tailwindcss/postcss` (or current Next.js-recommended Tailwind v4
+      setup) added to `apps/docs`
+- [ ] A dialog demo component styled entirely with Tailwind utility classes (no inline
+      `style` objects), covering at least the confirm flow
+- [ ] Embedded live in a docs page (new "Guides" section, see Task 10)
+
+**Verification:**
+- [ ] `pnpm --filter docs build` succeeds
+- [ ] Headless Chrome: click the trigger button, assert the dialog appears with expected
+      text, in both `prefers-color-scheme: light` and `dark`
+- [ ] No made-up CSS custom properties — every variable referenced must be verified to
+      actually exist (grep the actual installed CSS, don't assume)
+
+**Dependencies:** Task 6
+
+**Files likely touched:**
+- `apps/docs/package.json`, `apps/docs/postcss.config.*` or equivalent,
+  `apps/docs/content/dialog/**`, a new demo component under `apps/docs/components/`
+
+**Estimated scope:** M
+
+---
+
+## Task 8: MUI live demo
+
+**Description:** Add a real, verified-interactive dialog demo built with MUI's `Dialog`/
+`Button` components, wired to `@omnireact/dialog`'s templates.
+
+**Acceptance criteria:**
+- [ ] `@mui/material`, `@emotion/react`, `@emotion/styled` added to `apps/docs`
+- [ ] Emotion SSR cache correctly configured for the Next.js App Router (check current
+      official guidance/package — e.g. `@mui/material-nextjs`'s `AppRouterCacheProvider` —
+      rather than assuming the Pages Router setup still applies)
+- [ ] A dialog demo using real MUI components for the confirm flow
+- [ ] Embedded live in a docs page (Task 10's "Guides" section)
+
+**Verification:**
+- [ ] `pnpm --filter docs build` succeeds with no SSR/hydration warnings from Emotion in
+      the server logs
+- [ ] Headless Chrome: click-through verified same as Task 7, light and dark mode
+
+**Dependencies:** Task 6 (parallelizable with Task 7)
+
+**Files likely touched:**
+- `apps/docs/package.json`, `apps/docs/app/layout.tsx` (cache provider),
+  `apps/docs/content/dialog/**`, a new demo component
+
+**Estimated scope:** M
+
+---
+
+## Task 9: shadcn/ui live demo
+
+**Description:** Add a real, verified-interactive dialog demo using shadcn/ui's actual
+`Dialog` component (Radix UI primitive + Tailwind), wired to `@omnireact/dialog`.
+
+**Acceptance criteria:**
+- [ ] Run the real `shadcn` CLI (`npx shadcn@latest add dialog` or current equivalent) to
+      scaffold the component into `apps/docs` — do **not** hand-write shadcn's component
+      source from memory; its conventions (e.g. `data-slot` attributes, exact class names)
+      change between versions and must come from the actual tool output
+- [ ] Requires Tailwind already set up (shared with Task 7)
+- [ ] A dialog demo using the scaffolded shadcn `Dialog` for the confirm flow
+- [ ] Embedded live in a docs page (Task 10's "Guides" section)
+
+**Verification:**
+- [ ] `pnpm --filter docs build` succeeds
+- [ ] Headless Chrome: click-through verified same as Task 7, light and dark mode
+
+**Dependencies:** Task 7 (needs Tailwind already configured)
+
+**Files likely touched:**
+- `apps/docs/components/ui/dialog.tsx` (shadcn-generated), `apps/docs/package.json`,
+  `apps/docs/content/dialog/**`, a new demo component
+
+**Estimated scope:** M
+
+---
+
+## Task 10: Docs nav for the Guides section
+
+**Description:** Add a "Guides" (or "Recipes") section to the docs nav linking the
+Tailwind/MUI/shadcn demo pages from Tasks 7-9, and replace the "live demos are coming"
+note in `content/dialog/index.mdx` with real links.
+
+**Acceptance criteria:**
+- [ ] `content/_meta.ts` (or a new `content/guides/_meta.ts`) lists all three guide pages
+- [ ] `content/dialog/index.mdx`'s placeholder note replaced with links to the three guides
+
+**Verification:**
+- [ ] `pnpm --filter docs build` succeeds; nav renders all three links correctly
+
+**Dependencies:** Tasks 7, 8, 9
+
+**Files likely touched:**
+- `apps/docs/content/**`
+
+**Estimated scope:** S

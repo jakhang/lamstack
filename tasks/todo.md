@@ -306,7 +306,7 @@ just a successful build.
 
 ---
 
-## Task 10: Docs nav for the Guides section
+## Task 10: Docs nav for the Guides section — DONE
 
 **Description:** Add a "Guides" (or "Recipes") section to the docs nav linking the
 Tailwind/MUI/shadcn demo pages from Tasks 7-9, and replace the "live demos are coming"

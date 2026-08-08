@@ -118,8 +118,16 @@ success):
       `shadcn` CLI to scaffold its real `Dialog` component (don't hand-write it from
       memory — component source/conventions change between shadcn versions), wire it to
       `@omnireact/dialog`'s templates, verify interactively.
-- [ ] Task 10: Docs nav — add a "Guides" or "Recipes" section linking all three, replacing
+- [x] Task 10: Docs nav — add a "Guides" or "Recipes" section linking all three, replacing
       the "coming soon" note in `content/dialog/index.mdx`.
+
+### Checkpoint: Phase 6 complete
+- [x] All three guides (Tailwind, MUI, shadcn/ui) verified with real headless Chrome
+      click-through, light AND dark mode — not just successful builds
+- [x] `pnpm --filter docs build` succeeds with all 10 pages prerendered
+- [x] `pnpm --filter docs typecheck` and `eslint apps/docs` both clean
+- [x] Nav (sidebar, breadcrumb, prev/next) renders both "Dialog" and "Guides" sections
+      correctly
 
 ## Risks and Mitigations
 

@@ -4,6 +4,8 @@ A collection of independent, headless React packages. MIT licensed. Each package
 installable on its own and only depends on `@omnireact/core` (shared utilities) — never
 on a sibling feature package.
 
+📖 **Docs, live demos, and API reference: [omnireact-six.vercel.app](https://omnireact-six.vercel.app)**
+
 ```bash
 pnpm add @omnireact/dialog
 # or: npm install @omnireact/dialog

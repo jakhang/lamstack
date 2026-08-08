@@ -49,8 +49,8 @@ function DeleteButton() {
 }
 ```
 
-Full docs, live demo, and API reference: [omnireact docs](../../apps/docs) (or the
-published docs site once deployed).
+Full docs, live demos (Tailwind CSS / MUI / shadcn-ui), and API reference:
+**[omnireact-six.vercel.app/dialog](https://omnireact-six.vercel.app/dialog)**
 
 ## Credits
 

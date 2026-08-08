@@ -1,7 +1,9 @@
 # @omnireact/core
 
 Shared hooks used internally by `@omnireact/*` packages. Not feature-specific — usable
-standalone in any React 19 project.
+standalone in any React 18+ project.
+
+Docs: **[omnireact-six.vercel.app](https://omnireact-six.vercel.app)**
 
 ## Install
 

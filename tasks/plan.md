@@ -108,7 +108,7 @@ User decision: prioritize finishing full-feature docs content first (done above 
 popular styling approach, each verified the same way (headless Chrome, not just build
 success):
 
-- [ ] Task 7: Tailwind CSS demo — add `tailwindcss`/`@tailwindcss/postcss` to `apps/docs`,
+- [x] Task 7: Tailwind CSS demo — add `tailwindcss`/`@tailwindcss/postcss` to `apps/docs`,
       build a dialog demo styled with Tailwind utility classes, verify interactively
       (headless Chrome click-through, light AND dark mode).
 - [ ] Task 8: MUI demo — add `@mui/material`, `@emotion/react`, `@emotion/styled`, and

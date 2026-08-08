@@ -217,7 +217,7 @@ scaffolds the site and one demo page.
 
 ---
 
-## Task 7: Tailwind CSS live demo
+## Task 7: Tailwind CSS live demo — DONE
 
 **Description:** Add a real, verified-interactive dialog demo styled with Tailwind CSS.
 The earlier generic inline-style demo (removed) had real bugs — a made-up `--nextra-bg`

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
+    "postbuild": "pagefind --site .next/server/app --output-path public/_pagefind",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/mdx": "^2.0.14",
+    "pagefind": "^1.5.2",
     "tailwindcss": "^4.3.3"
   }
 }

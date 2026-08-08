@@ -7,3 +7,4 @@ dist
 .env
 .env.*
 coverage
+**/public/_pagefind

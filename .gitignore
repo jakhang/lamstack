@@ -6,5 +6,6 @@ dist
 *.local
 .env
 .env.*
+.claude/*
 coverage
 **/public/_pagefind

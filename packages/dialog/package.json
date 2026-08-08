@@ -2,7 +2,25 @@
   "name": "@omnireact/dialog",
   "version": "0.0.1",
   "description": "Headless, imperative dialog API for React (alert/confirm/prompt + custom dialogs).",
+  "keywords": [
+    "react",
+    "dialog",
+    "modal",
+    "headless",
+    "toolpad",
+    "omnireact"
+  ],
   "license": "MIT",
+  "author": "Ja Khang",
+  "homepage": "https://github.com/jakhang/omnireact/tree/main/packages/dialog#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jakhang/omnireact.git",
+    "directory": "packages/dialog"
+  },
+  "bugs": {
+    "url": "https://github.com/jakhang/omnireact/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
@@ -23,6 +41,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -38,7 +59,7 @@
     "@types/invariant": "^2.2.37"
   },
   "peerDependencies": {
-    "react": "^19"
+    "react": ">=18"
   },
   "publishConfig": {
     "access": "public"

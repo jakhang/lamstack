@@ -1,12 +1,40 @@
+import { Tabs } from 'nextra/components';
+
 # @omnireact/dialog
 
 Headless, imperative dialog API for React. Wrap your app in `DialogsProvider`, supply the
 components used to render `alert`/`confirm`/`prompt`, then open dialogs from anywhere with
 `useDialogs()` — no dialog markup baked in, so it works with any UI library (or none).
 
-```bash
-pnpm add @omnireact/dialog
-```
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tabs.Tab>
+    ```bash
+    pnpm add @omnireact/dialog
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    npm install @omnireact/dialog
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    yarn add @omnireact/dialog
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    bun add @omnireact/dialog
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+> **Credit:** This API is a headless extraction of
+> [MUI Toolpad Core's `useDialogs`](https://mui.com/toolpad/core/react-use-dialogs/) —
+> same `open`/`close`/`alert`/`confirm`/`prompt` shape and `onClose` semantics, ported out
+> from under MUI so it has no MUI dependency and works with any UI library. All credit for
+> the original design goes to the Toolpad team; see [Prior art](/dialog/concepts#prior-art)
+> for the full comparison.
 
 > Want to see it wired up to a real UI first? Jump to the [Guides](/guides) — live demos
 > for Tailwind CSS, MUI, and shadcn/ui.

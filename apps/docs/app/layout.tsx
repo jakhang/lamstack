@@ -21,7 +21,7 @@ export const metadata = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const navbar = <Navbar logo={<b>omnireact</b>} />;
+  const navbar = <Navbar logo={<b>Omnireact</b>} />;
   const pageMap = await getPageMap();
 
   return (
@@ -32,7 +32,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <ThemeProvider theme={muiTheme}>
             <Layout
               navbar={navbar}
-              footer={<Footer>MIT {new Date().getFullYear()} © jakhang.</Footer>}
               docsRepositoryBase="https://github.com/jakhang/omnireact/tree/main/apps/docs"
               pageMap={pageMap}
               toc={{ backToTop: false }}

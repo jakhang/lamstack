@@ -52,6 +52,14 @@ function DeleteButton() {
 Full docs, live demo, and API reference: [omnireact docs](../../apps/docs) (or the
 published docs site once deployed).
 
+## Credits
+
+This API is a headless extraction of
+[MUI Toolpad Core's `useDialogs`](https://mui.com/toolpad/core/react-use-dialogs/) — same
+`open`/`close`/`alert`/`confirm`/`prompt` shape and `onClose` semantics, ported out from
+under MUI so it has no MUI dependency. All credit for the original design goes to the
+Toolpad team.
+
 ## License
 
 MIT

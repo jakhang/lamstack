@@ -163,9 +163,6 @@ importers:
 
   packages/initializer:
     dependencies:
-      '@omnireact/core':
-        specifier: workspace:*
-        version: link:../core
       react:
         specifier: '>=18'
         version: 19.2.8

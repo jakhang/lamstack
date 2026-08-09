@@ -2,72 +2,87 @@
 
 ## `InitializationTask`
 
-A single task in the graph.
+A single task — one stage, or one member of a `parallel([...])` stage.
 
 ```ts
-interface InitializationTask {
+interface InitializationTask<S extends StateMap = StateMap> {
   id: string;
-  dependsOn?: string[];
+  label?: string;
   critical?: boolean; // default true
   retry?: number; // total attempts, default 1
+  retryDelay?: number | ((attempt: number) => number); // ms, default 0
   timeout?: number; // ms, per attempt
-  condition?: (context: InitializationContext) => boolean | Promise<boolean>;
-  run(context: InitializationContext): Promise<void>;
+  condition?: (context: InitializationContext<S>) => boolean | Promise<boolean>;
+  run: (context: InitializationContext<S>) => void | Promise<void>;
 }
 ```
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `id` | `string` | Uniquely identifies the task — used for `dependsOn`, `state`, and error reporting. |
-| `dependsOn` | `string[]` | Extra dependency ids, unioned with whatever position/`parallel()` already implies. See [Concepts](/initializer/concepts#the-dependency-graph). |
-| `critical` | `boolean` | Defaults to `true`. `false` lets the task fail without halting the run. |
-| `retry` | `number` | Total attempts (default `1`, no retry), run back to back with no delay. |
-| `timeout` | `number` | Max ms per attempt before it's treated as a failure (`InitializerTimeoutError`). |
-| `condition` | `(context) => boolean \| Promise<boolean>` | Returning `false` skips the task (and cascades to its dependents). A throw is treated as a failure. |
-| `run` | `(context) => Promise<void>` | The task's work. |
+| `id` | `string` | Uniquely identifies the task — used for tracking and error reporting. Must be unique across the whole `tasks` list. |
+| `label` | `string` | Human-readable name for UI (splash/error screens), surfaced on `TaskSnapshot`. Falls back to `id` if unset. |
+| `critical` | `boolean` | Defaults to `true`. `false` lets the task fail without halting the run — see [Concepts](/initializer/concepts#critical-vs-non-critical-failures). |
+| `retry` | `number` | Total attempts (default `1`, no retry). |
+| `retryDelay` | `number \| ((attempt) => number)` | Delay in ms before each retry (not before the first attempt, not after the last). A function receives the 1-based attempt that just failed. Defaults to `0`. |
+| `timeout` | `number` | Max ms per attempt before it's treated as a failure (`InitializerTimeoutError`) — trips `context.signal` for that attempt. |
+| `condition` | `(context) => boolean \| Promise<boolean>` | Returning `false` skips the task — the only source of `'skipped'`. A throw is treated as a failure. |
+| `run` | `(context) => void \| Promise<void>` | The task's work. May be synchronous. |
 
 ## `InitializationContext`
 
 Passed to every `run`/`condition` call.
 
 ```ts
-interface InitializationContext {
+interface InitializationContext<S extends StateMap = StateMap> {
   signal: AbortSignal;
-  state: InitializationState;
+  state: InitializationState<S>;
 }
 ```
 
 ## `InitializationState`
 
-The shared key/value bag at `context.state`, one instance per run.
+The shared key/value bag at `context.state`, one instance per run — also readable after
+the run completes, via `InitializerHandle.getState()` / `useInitializer().getState()` /
+the `onComplete` event.
 
 ```ts
-interface InitializationState {
-  get<T = unknown>(key: string): T | undefined;
-  set<T = unknown>(key: string, value: T): void;
-  has(key: string): boolean;
+interface InitializationState<S extends StateMap = StateMap> {
+  get<K extends keyof S>(key: K): S[K] | undefined;
+  set<K extends keyof S>(key: K, value: S[K]): void;
+  has(key: keyof S): boolean;
 }
 ```
+
+Parameterize with a `StateMap` (e.g. `InitializationState<{ user: User }>`, inferred
+automatically from `InitializationTask<{ user: User }>` /
+`createInitializer<{ user: User }>()` / `<Initializer<{ user: User }>>`) to get
+`get`/`set` checked and inferred per key instead of `unknown`-typed.
 
 ## `parallel()`
 
 ```ts
-function parallel(tasks: InitializationTask[]): ParallelGroup;
+function parallel<S extends StateMap = StateMap>(
+  tasks: InitializationTask<S>[],
+  options?: { concurrency?: number },
+): ParallelGroup<S>;
 ```
 
-Wraps tasks so they run concurrently against the same set of dependencies. Use only for
-tasks that are independent of each other — the initializer waits for the whole group to
-settle before continuing. See [Concepts](/initializer/concepts#the-dependency-graph).
+Wraps tasks into a single stage that runs them all concurrently — the run waits for the
+whole stage to settle before starting the next one. `concurrency` caps how many of the
+stage's tasks run at once (e.g. to avoid firing 50 simultaneous requests); omit it for no
+cap.
 
 ## `<Initializer>`
 
 ```tsx
-import { Initializer } from '@omnireact/initializer';
+import { Initializer } from '@omnireact/initializer/react';
 
 <Initializer
   tasks={tasks}
   splashScreen={MySplashScreen}
   errorScreen={MyErrorScreen}
+  cancelledScreen={MyCancelledScreen}
+  minSplashDuration={300}
   onTaskStart={(task) => logger.info(`Starting ${task.id}`)}
   onTaskFailed={(task, error) => logger.error(task.id, error)}
 >
@@ -77,14 +92,16 @@ import { Initializer } from '@omnireact/initializer';
 
 | Prop | Type | Description |
 | --- | --- | --- |
-| `tasks` | `TaskEntry[]` | Required. `InitializationTask`s and/or `parallel([...])` groups. Only read at the moment a run (re)starts — mount, or after `retry()`. |
+| `tasks` | `TaskEntry<S>[]` | Required. `InitializationTask`s and/or `parallel([...])` stages, run in order. Only read at the moment a run (re)starts — mount, or after `retry()`. |
 | `splashScreen` | `ComponentType<SplashScreenProps>` | Shown while any task is pending/running. Defaults to a plain built-in screen. |
 | `errorScreen` | `ComponentType<ErrorScreenProps>` | Shown when a critical task fails. Defaults to a plain built-in screen with a "Retry" button. |
+| `cancelledScreen` | `ComponentType<CancelledScreenProps>` | Shown when the run was cancelled via `abort()`. Defaults to a plain built-in screen with a "Retry" button. |
+| `minSplashDuration` | `number` | Keeps the splash up for at least this many ms once shown, even if the run settles sooner. Defaults to `0`. |
 | `children` | `ReactNode` | Rendered once every task has settled successfully (`status === 'completed'`). |
 | `onTaskStart` | `(task) => void` | Fires when a task begins running (after its `condition` check passes). |
 | `onTaskComplete` | `(task) => void` | Fires when a task succeeds. |
 | `onTaskFailed` | `(task, error) => void` | Fires when a task's final attempt fails (after retries are exhausted). |
-| `onComplete` | `() => void` | Fires once, when every task has settled with no critical failure. |
+| `onComplete` | `(state: InitializationState<S>) => void` | Fires once, when every task has settled with no critical failure — with the final shared `state`. |
 | `onError` | `(error: InitializationError) => void` | Fires once, with the first critical failure that halted the run. |
 | `onAbort` | `() => void` | Fires when `abort()` is called manually (not from a critical failure). |
 
@@ -106,25 +123,31 @@ interface ErrorScreenProps {
 }
 ```
 
-## `useInitializer()`
-
-Must be called from a component rendered under `<Initializer>` — since `children` only
-mounts once `status === 'completed'`, this is typically used to trigger a later reload
-rather than to read state during the loading phase (the splash/error screens get what
-they need as props instead).
+### `CancelledScreenProps`
 
 ```ts
-const { status, progress, tasks, error, retry, abort } = useInitializer();
+interface CancelledScreenProps {
+  retry: () => void;
+}
+```
+
+## `useInitializer()`
+
+Must be called from a component rendered under `<Initializer>`.
+
+```ts
+const { status, progress, tasks, error, retry, abort, getState } = useInitializer<S>();
 ```
 
 | Member | Type | Description |
 | --- | --- | --- |
 | `status` | `InitializationStatus` | `'idle' \| 'running' \| 'completed' \| 'failed' \| 'cancelled'`. |
 | `progress` | `number` | Percentage of tasks that have settled (0-100). |
-| `tasks` | `TaskSnapshot[]` | Per-task `{ id, status }`, in declaration order. |
+| `tasks` | `TaskSnapshot[]` | Per-task status, in declaration order. |
 | `error` | `InitializationError \| null` | The critical failure that halted the run, if any. |
-| `retry` | `() => void` | Restarts the whole sequence from the beginning (a fresh graph, fresh `state`, fresh `AbortController`). |
-| `abort` | `() => void` | Aborts the sequence in progress. |
+| `retry` | `() => void` | Restarts the whole run from the beginning (a fresh run, fresh `state`, fresh `AbortController`). |
+| `abort` | `() => void` | Aborts the run in progress. |
+| `getState` | `() => InitializationState<S>` | The shared `state` bag. Only reliably complete once `status` is `'completed'`. |
 
 ## `createInitializer()`
 
@@ -142,15 +165,17 @@ const unsubscribe = initializer.subscribe(() => {
 
 await initializer.run();
 // later:
+console.log(initializer.getState().get('user'));
 initializer.abort();
 unsubscribe();
 ```
 
 | Member | Signature | Description |
 | --- | --- | --- |
-| `run` | `() => Promise<void>` | Starts the sequence. Building the graph happens synchronously inside `createInitializer()` itself — a malformed graph throws immediately, before `run()` is ever called. Calling `run()` more than once is a no-op. |
-| `abort` | `() => void` | Aborts the sequence in progress. |
-| `getSnapshot` | `() => RunnerSnapshot` | The current `{ status, progress, tasks, error }`. |
+| `run` | `() => Promise<void>` | Starts the run. `tasks` is validated synchronously inside `createInitializer()` itself — a duplicate id throws immediately, before `run()` is ever called. Calling `run()` more than once is a no-op. |
+| `abort` | `() => void` | Aborts the run in progress. |
+| `getSnapshot` | `() => InitializerSnapshot` | The current `{ status, progress, tasks, error }`. |
+| `getState` | `() => InitializationState<S>` | The shared `state` bag. Only reliably complete once `getSnapshot().status` is `'completed'`. |
 | `subscribe` | `(listener: () => void) => () => void` | Registers a listener called on every snapshot change; returns an unsubscribe function. |
 
 ## Other types
@@ -168,7 +193,11 @@ type InitializationTaskStatus =
 
 interface TaskSnapshot {
   id: string;
+  label?: string;
   status: InitializationTaskStatus;
+  critical: boolean;
+  error?: unknown; // set for BOTH critical and non-critical failures
+  durationMs?: number; // set once settled as 'completed' or 'failed'
 }
 
 interface InitializationError {
@@ -176,7 +205,7 @@ interface InitializationError {
   error: unknown;
 }
 
-interface RunnerSnapshot {
+interface InitializerSnapshot {
   status: InitializationStatus;
   progress: number;
   tasks: TaskSnapshot[];
@@ -187,3 +216,11 @@ interface RunnerSnapshot {
 `InitializerTimeoutError` (extends `Error`) is thrown internally when a task exceeds its
 `timeout` — check `error.error instanceof InitializerTimeoutError` in `onTaskFailed`/
 `onError` to distinguish a timeout from any other failure.
+
+## Dev-mode diagnostics
+
+Outside `NODE_ENV=production`, `createInitializer` logs a `console.warn` for a task with
+`retry` but no `timeout`, and for a `critical: false` task placed in its own sequential
+stage (its failure won't block the run, but the next stage still waits for it to settle).
+Call `checkTasks(tasks)` yourself to get these as a plain `string[]` — e.g. to assert on
+in a test, or run as a lint script — instead of relying on the console.

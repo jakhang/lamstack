@@ -1,5 +1,6 @@
 import type { InitializationContext } from './context';
-import type { InitializationState } from './state';
+import { isDev } from './dev-warnings';
+import type { InitializationState, StateMap } from './state';
 import { isParallelGroup, type InitializationTask, type TaskEntry } from './task';
 
 export type InitializationStatus = 'idle' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -19,10 +20,24 @@ export interface InitializationError {
 
 export interface TaskSnapshot {
   id: string;
+  /** Human-readable label for UI, if the task set one — falls back to `id` otherwise. */
+  label?: string;
   status: InitializationTaskStatus;
+  /** Whether this task's failure halts the whole run (mirrors `InitializationTask.critical`, defaulting to `true`). */
+  critical: boolean;
+  /**
+   * The error that caused a 'failed' status, for both critical and
+   * non-critical failures. `InitializerSnapshot.error` only ever holds the
+   * first *critical* failure — a `critical: false` task's error is
+   * otherwise only reachable via the `onTaskFailed` event, invisible to any
+   * UI that only reads snapshots.
+   */
+  error?: unknown;
+  /** How long the task's `run` took, once settled (`completed` or `failed`). Not set for `pending`/`running`/`skipped`/`cancelled`. */
+  durationMs?: number;
 }
 
-export interface RunnerSnapshot {
+export interface InitializerSnapshot {
   status: InitializationStatus;
   /** Percentage of tasks that have settled (0-100). */
   progress: number;
@@ -30,11 +45,12 @@ export interface RunnerSnapshot {
   error: InitializationError | null;
 }
 
-export interface RunnerEvents {
-  onTaskStart?: (task: InitializationTask) => void;
-  onTaskComplete?: (task: InitializationTask) => void;
-  onTaskFailed?: (task: InitializationTask, error: unknown) => void;
-  onComplete?: () => void;
+export interface InitializerEvents<S extends StateMap = StateMap> {
+  onTaskStart?: (task: InitializationTask<S>) => void;
+  onTaskComplete?: (task: InitializationTask<S>) => void;
+  onTaskFailed?: (task: InitializationTask<S>, error: unknown) => void;
+  /** Fires once the run completes successfully, with the final shared `state` — see `InitializerHandle.getState`. */
+  onComplete?: (state: InitializationState<S>) => void;
   onError?: (error: InitializationError) => void;
   onAbort?: () => void;
 }
@@ -46,113 +62,135 @@ export class InitializerTimeoutError extends Error {
   }
 }
 
-export interface GraphNode {
-  task: InitializationTask;
-  dependsOn: Set<string>;
+/** Caps how many `parallel()` tasks in the same stage run at once — see `ParallelOptions.concurrency`. */
+class Semaphore {
+  private available: number;
+  private readonly queue: (() => void)[] = [];
+
+  constructor(limit: number) {
+    this.available = limit;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.available > 0) {
+      this.available -= 1;
+      return;
+    }
+    await new Promise<void>((resolve) => this.queue.push(resolve));
+    this.available -= 1;
+  }
+
+  release(): void {
+    this.available += 1;
+    this.queue.shift()?.();
+  }
+}
+
+/** Every task across every stage, in declared order — the flat unit `id` uniqueness, initial snapshots, and progress totals are all computed over. */
+function flattenTasks<S extends StateMap>(entries: readonly TaskEntry<S>[]): InitializationTask<S>[] {
+  const tasks: InitializationTask<S>[] = [];
+  for (const entry of entries) {
+    if (isParallelGroup(entry)) tasks.push(...entry.tasks);
+    else tasks.push(entry);
+  }
+  return tasks;
 }
 
 /**
- * =============================================================================
- * Graph construction
- * =============================================================================
- *
- * `tasks` is flattened into a dependency graph. Two mechanisms produce
- * dependencies, and they're unioned together:
- *
- *  - Position: scanning the array in order, each entry depends on the
- *    "barrier" set left by whatever came immediately before it. A plain task
- *    becomes the new one-task barrier for what follows. A `parallel([...])`
- *    group's tasks all depend on the same prior barrier (so they run
- *    concurrently, not on each other) and, together, become the barrier for
- *    what follows — the initializer waits for the whole group before moving
- *    on.
- *  - `dependsOn`: explicit extra dependencies, for edges that position alone
- *    can't express (e.g. a later task depending on a non-adjacent earlier
- *    one).
- *
- * If a dependency doesn't complete successfully (failed, skipped, or
- * cancelled), tasks that depend on it are skipped rather than run — see
- * `runNode`.
- * =============================================================================
+ * Throws on a duplicate task id — the only structural validation left once
+ * there's no dependency graph to check — and returns the flattened task
+ * list, so `createInitializer` can build its initial snapshot from the same
+ * pass instead of flattening `entries` a second time.
  */
-export function buildGraph(entries: readonly TaskEntry[]): Map<string, GraphNode> {
-  const nodes = new Map<string, GraphNode>();
-  let barrier: string[] = [];
-
-  const addNode = (task: InitializationTask, autoDeps: readonly string[]) => {
-    if (nodes.has(task.id)) {
+export function validateTasks<S extends StateMap>(entries: readonly TaskEntry<S>[]): InitializationTask<S>[] {
+  const tasks = flattenTasks(entries);
+  const seen = new Set<string>();
+  for (const task of tasks) {
+    if (seen.has(task.id)) {
       throw new Error(`[@omnireact/initializer] Duplicate task id: "${task.id}"`);
     }
-    nodes.set(task.id, { task, dependsOn: new Set([...autoDeps, ...(task.dependsOn ?? [])]) });
-  };
-
-  for (const entry of entries) {
-    if (isParallelGroup(entry)) {
-      for (const task of entry.tasks) addNode(task, barrier);
-      barrier = entry.tasks.map((task) => task.id);
-    } else {
-      addNode(entry, barrier);
-      barrier = [entry.id];
-    }
+    seen.add(task.id);
   }
-
-  for (const node of nodes.values()) {
-    for (const depId of node.dependsOn) {
-      if (!nodes.has(depId)) {
-        throw new Error(
-          `[@omnireact/initializer] Task "${node.task.id}" depends on unknown task "${depId}"`,
-        );
-      }
-    }
-  }
-
-  assertAcyclic(nodes);
-  return nodes;
+  return tasks;
 }
 
-function assertAcyclic(nodes: Map<string, GraphNode>): void {
-  const visited = new Map<string, 'visiting' | 'done'>();
-
-  const visit = (id: string, path: readonly string[]) => {
-    const mark = visited.get(id);
-    if (mark === 'done') return;
-    if (mark === 'visiting') {
-      throw new Error(
-        `[@omnireact/initializer] Circular dependency detected: ${[...path, id].join(' -> ')}`,
-      );
-    }
-    visited.set(id, 'visiting');
-    for (const depId of nodes.get(id)!.dependsOn) {
-      visit(depId, [...path, id]);
-    }
-    visited.set(id, 'done');
-  };
-
-  for (const id of nodes.keys()) visit(id, []);
-}
-
-// =============================================================================
-// Execution
-// =============================================================================
-
-async function runWithTimeout(task: InitializationTask, context: InitializationContext): Promise<void> {
+/**
+ * Runs one attempt. On timeout, trips a signal scoped to *this attempt* —
+ * derived from `context.signal` so a whole-run abort still propagates —
+ * rather than just walking away from `task.run()` via `Promise.race` and
+ * leaving it running in the background. A task that checks `signal` (e.g. an
+ * abortable delay, or passing it to `fetch`) can now actually stop; one that
+ * doesn't still can't be forcibly killed — JS has no preemptive cancellation,
+ * only cooperative, same as the whole-run abort in `runStages`.
+ */
+async function runWithTimeout<S extends StateMap>(
+  task: InitializationTask<S>,
+  context: InitializationContext<S>,
+): Promise<void> {
   if (!task.timeout) {
     await task.run(context);
     return;
   }
+
+  const timeoutController = new AbortController();
+  const attemptContext: InitializationContext<S> = {
+    ...context,
+    signal: AbortSignal.any([context.signal, timeoutController.signal]),
+  };
+
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new InitializerTimeoutError(task.id, task.timeout!)), task.timeout);
+    timer = setTimeout(() => {
+      timeoutController.abort();
+      reject(new InitializerTimeoutError(task.id, task.timeout!));
+    }, task.timeout);
   });
+
+  // Dev-only early warning at 50% of the budget — a task that's frequently
+  // this close to timing out is worth a heads-up before it starts actually
+  // failing, not just a hard cutoff at 100%.
+  let halfwayTimer: ReturnType<typeof setTimeout> | undefined;
+  if (isDev()) {
+    halfwayTimer = setTimeout(() => {
+      console.warn(
+        `[@omnireact/initializer] Task "${task.id}" is still running past 50% of its ` +
+          `${task.timeout}ms timeout.`,
+      );
+    }, task.timeout / 2);
+  }
+
   try {
-    await Promise.race([task.run(context), timeoutPromise]);
+    await Promise.race([task.run(attemptContext), timeoutPromise]);
   } finally {
     clearTimeout(timer);
+    clearTimeout(halfwayTimer);
   }
 }
 
-/** Runs `task` up to `task.retry` times (default 1, i.e. no retry), immediately, with no backoff. */
-async function runWithRetry(task: InitializationTask, context: InitializationContext): Promise<void> {
+/** Resolves after `ms`, or as soon as `signal` aborts — whichever comes first. */
+function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+/** Runs `task` up to `task.retry` times (default 1, i.e. no retry), waiting `task.retryDelay` between attempts. */
+async function runWithRetry<S extends StateMap>(
+  task: InitializationTask<S>,
+  context: InitializationContext<S>,
+): Promise<void> {
   const maxAttempts = Math.max(1, task.retry ?? 1);
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -162,33 +200,30 @@ async function runWithRetry(task: InitializationTask, context: InitializationCon
     } catch (error) {
       lastError = error;
       if (context.signal.aborted) throw error;
+      if (attempt < maxAttempts && task.retryDelay) {
+        const delayMs = typeof task.retryDelay === 'function' ? task.retryDelay(attempt) : task.retryDelay;
+        if (delayMs > 0) await abortableSleep(delayMs, context.signal);
+        if (context.signal.aborted) throw error;
+      }
     }
   }
   throw lastError;
 }
 
-async function runNode(
-  node: GraphNode,
-  statuses: Map<string, InitializationTaskStatus>,
-  context: InitializationContext,
+/**
+ * Runs a single task to completion: `condition` check, then `run` (with
+ * retry/timeout), reporting every status transition via `updateStatus`. A
+ * critical failure is reported via `reportCriticalFailure`, which aborts the
+ * whole run — `runStages` is what stops moving to the next stage once that
+ * happens, this function only ever handles the one task in front of it.
+ */
+async function runTask<S extends StateMap>(
+  task: InitializationTask<S>,
+  context: InitializationContext<S>,
   reportCriticalFailure: (error: InitializationError) => void,
-  updateStatus: (id: string, status: InitializationTaskStatus) => void,
-  events: RunnerEvents,
+  updateStatus: (id: string, status: InitializationTaskStatus, error?: unknown, durationMs?: number) => void,
+  events: InitializerEvents<S>,
 ): Promise<void> {
-  const { task } = node;
-
-  // A task with unsatisfied dependencies is "skipped" (cascade), regardless
-  // of *why* the dependency didn't complete — including a dependency that
-  // was itself cancelled by an abort. Tasks with no dependencies vacuously
-  // pass this check and fall through to the plain abort check below, so an
-  // independent branch that never got to start is correctly "cancelled"
-  // rather than "skipped".
-  const depsSatisfied = [...node.dependsOn].every((depId) => statuses.get(depId) === 'completed');
-  if (!depsSatisfied) {
-    updateStatus(task.id, 'skipped');
-    return;
-  }
-
   if (context.signal.aborted) {
     updateStatus(task.id, 'cancelled');
     return;
@@ -199,7 +234,7 @@ async function runNode(
     try {
       shouldRun = await task.condition(context);
     } catch (conditionError) {
-      updateStatus(task.id, 'failed');
+      updateStatus(task.id, 'failed', conditionError);
       events.onTaskFailed?.(task, conditionError);
       if (task.critical !== false) reportCriticalFailure({ taskId: task.id, error: conditionError });
       return;
@@ -216,6 +251,7 @@ async function runNode(
 
   updateStatus(task.id, 'running');
   events.onTaskStart?.(task);
+  const startedAt = Date.now();
 
   try {
     await runWithRetry(task, context);
@@ -223,54 +259,70 @@ async function runNode(
       updateStatus(task.id, 'cancelled');
       return;
     }
-    updateStatus(task.id, 'completed');
+    updateStatus(task.id, 'completed', undefined, Date.now() - startedAt);
     events.onTaskComplete?.(task);
   } catch (error) {
     if (context.signal.aborted) {
       updateStatus(task.id, 'cancelled');
       return;
     }
-    updateStatus(task.id, 'failed');
+    updateStatus(task.id, 'failed', error, Date.now() - startedAt);
     events.onTaskFailed?.(task, error);
     if (task.critical !== false) reportCriticalFailure({ taskId: task.id, error });
   }
 }
 
-export interface ExecuteGraphResult {
+export interface RunStagesResult {
   /** The first critical task failure, if any halted the run. */
   error: InitializationError | null;
 }
 
 /**
- * Runs every node in `nodes` to completion, respecting the dependency graph
- * (independent branches run concurrently — a node starts as soon as its
- * dependencies have all settled). `emitSnapshot` is called after every task
- * status transition so callers can drive reactive UI.
+ * Runs `entries` — a list of stages, each either one task or a
+ * `parallel([...])` group — strictly in order: every task in a stage starts
+ * together and the run waits for all of them to settle before moving to the
+ * next stage. A critical failure aborts the signal, which stops the *next*
+ * stage from starting (tasks already in flight in the current stage still
+ * run to completion) — everything that never got a chance to start ends up
+ * `'cancelled'`. `emitSnapshot` is called after every task status
+ * transition so callers can drive reactive UI.
  */
-export async function executeGraph(
-  nodes: Map<string, GraphNode>,
+export async function runStages<S extends StateMap = StateMap>(
+  entries: readonly TaskEntry<S>[],
   ac: AbortController,
-  state: InitializationState,
-  events: RunnerEvents,
-  emitSnapshot: (snapshot: RunnerSnapshot) => void,
-): Promise<ExecuteGraphResult> {
-  const context: InitializationContext = { signal: ac.signal, state };
-  const total = nodes.size;
+  state: InitializationState<S>,
+  events: InitializerEvents<S>,
+  emitSnapshot: (snapshot: InitializerSnapshot) => void,
+): Promise<RunStagesResult> {
+  const context: InitializationContext<S> = { signal: ac.signal, state };
+  const allTasks = validateTasks(entries);
+  const total = allTasks.length;
   let settledCount = 0;
   let recordedError: InitializationError | null = null;
 
   const statuses = new Map<string, InitializationTaskStatus>();
-  for (const id of nodes.keys()) statuses.set(id, 'pending');
+  const taskErrors = new Map<string, unknown>();
+  const durations = new Map<string, number>();
+  for (const task of allTasks) statuses.set(task.id, 'pending');
 
-  const snapshot = (): RunnerSnapshot => ({
+  const snapshot = (): InitializerSnapshot => ({
     status: 'running',
     progress: total === 0 ? 100 : Math.round((settledCount / total) * 100),
-    tasks: [...statuses.entries()].map(([id, status]) => ({ id, status })),
+    tasks: allTasks.map((task) => ({
+      id: task.id,
+      label: task.label,
+      status: statuses.get(task.id)!,
+      critical: task.critical !== false,
+      ...(taskErrors.has(task.id) ? { error: taskErrors.get(task.id) } : {}),
+      ...(durations.has(task.id) ? { durationMs: durations.get(task.id) } : {}),
+    })),
     error: recordedError,
   });
 
-  const updateStatus = (id: string, status: InitializationTaskStatus) => {
+  const updateStatus = (id: string, status: InitializationTaskStatus, error?: unknown, durationMs?: number) => {
     statuses.set(id, status);
+    if (status === 'failed') taskErrors.set(id, error);
+    if (durationMs !== undefined) durations.set(id, durationMs);
     if (status !== 'running') settledCount += 1;
     emitSnapshot(snapshot());
   };
@@ -287,22 +339,31 @@ export async function executeGraph(
     return { error: null };
   }
 
-  const promises = new Map<string, Promise<void>>();
-  const getOrCreatePromise = (id: string): Promise<void> => {
-    let p = promises.get(id);
-    if (!p) {
-      const node = nodes.get(id)!;
-      p = (async () => {
-        await Promise.all([...node.dependsOn].map((depId) => getOrCreatePromise(depId)));
-        await runNode(node, statuses, context, reportCriticalFailure, updateStatus, events);
-      })();
-      promises.set(id, p);
-    }
-    return p;
-  };
+  for (const entry of entries) {
+    const stageTasks = isParallelGroup(entry) ? entry.tasks : [entry];
+    if (stageTasks.length === 0) continue; // an empty parallel([]) is a pure no-op
 
-  for (const id of nodes.keys()) getOrCreatePromise(id);
-  await Promise.all(promises.values());
+    const semaphore = isParallelGroup(entry) && entry.concurrency ? new Semaphore(entry.concurrency) : undefined;
+
+    await Promise.all(
+      stageTasks.map(async (task) => {
+        if (semaphore) await semaphore.acquire();
+        try {
+          await runTask(task, context, reportCriticalFailure, updateStatus, events);
+        } finally {
+          semaphore?.release();
+        }
+      }),
+    );
+
+    if (context.signal.aborted) break;
+  }
+
+  // Anything still 'pending' never got its stage reached — the run was
+  // aborted (manually, or by a critical failure) before then.
+  for (const task of allTasks) {
+    if (statuses.get(task.id) === 'pending') updateStatus(task.id, 'cancelled');
+  }
 
   return { error: recordedError };
 }

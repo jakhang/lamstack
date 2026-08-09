@@ -1,13 +1,18 @@
-import { Tabs } from 'nextra/components';
+import { Callout, Tabs } from 'nextra/components';
 import { InitializerDemo } from '../../components/initializer-demo';
 
 # @omnireact/initializer
 
-A lightweight application-startup orchestrator for React. `<Initializer>` runs a
-dependency graph of async tasks — sequential, parallel, or explicitly interdependent —
-before rendering your app, with retry, timeout, and critical/non-critical failure
-handling built in. The task runner has no React dependency; the React layer is a thin
-adapter on top of it.
+A lightweight application-startup orchestrator for React. `<Initializer>` runs a sequence
+of stages — a task, or several running concurrently via `parallel([...])` — before
+rendering your app, with retry, timeout, and critical/non-critical failure handling built
+in. The task runner has no React dependency; the React layer is a thin adapter on top of
+it.
+
+<Callout type="warning">
+  Pre-1.0 (`0.x`): the API may still change between minor versions. See
+  [Non-goals](#non-goals) below for what this library deliberately doesn't do.
+</Callout>
 
 <Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tabs.Tab>
@@ -34,11 +39,12 @@ adapter on top of it.
 
 ## Live demo
 
-Five tasks: `config` runs first, then `auth` (critical — its failure halts everything),
-then a `parallel([...])` batch of `profile`/`cache`/`analytics` — all three depend on
-`auth` by array position, so if `auth` fails they're cascade-**skipped** rather than run.
-`analytics` is marked `critical: false` and always fails on its own — try it with the
-checkbox off to see a non-critical failure recorded without blocking the app.
+Three stages: `config` runs first, then `auth` (critical — its failure aborts the whole
+run), then a `parallel([...])` stage of `profile`/`cache`/`translations` — since `auth` is
+a stage of its own, that whole third stage simply never starts if `auth` fails.
+`translations` is marked `critical: false` and always fails on its own — try it with the
+checkbox off to see a non-critical failure recorded without blocking the app (in a real
+app you'd fall back to a default locale here).
 
 <Tabs items={['Preview', 'Code']}>
   <Tabs.Tab>
@@ -52,14 +58,10 @@ checkbox off to see a non-critical failure recorded without blocking the app.
     'use client';
 
     import * as React from 'react';
-    import { Initializer, parallel, useInitializer } from '@omnireact/initializer';
-    import type {
-      ErrorScreenProps,
-      InitializationTask,
-      SplashScreenProps,
-      TaskEntry,
-      TaskSnapshot,
-    } from '@omnireact/initializer';
+    import { parallel } from '@omnireact/initializer';
+    import type { InitializationTask, TaskEntry, TaskSnapshot } from '@omnireact/initializer';
+    import { Initializer, useInitializer } from '@omnireact/initializer/react';
+    import type { ErrorScreenProps, SplashScreenProps } from '@omnireact/initializer/react';
 
     function delay(ms: number): Promise<void> {
       return new Promise((resolve) => setTimeout(resolve, ms));
@@ -156,20 +158,20 @@ checkbox off to see a non-critical failure recorded without blocking the app.
         },
       };
 
-      // These three all depend on `auth` by position — if auth fails, all
-      // three are cascade-skipped rather than run.
+      // This whole stage runs after `auth` settles — if auth fails, the run
+      // aborts and none of these three ever start.
       const profile: InitializationTask = { id: 'profile', run: () => delay(500) };
       const cache: InitializationTask = { id: 'cache', run: () => delay(350) };
-      const analytics: InitializationTask = {
-        id: 'analytics',
-        critical: false, // optional — its failure doesn't block the app
+      const translations: InitializationTask = {
+        id: 'translations',
+        critical: false, // must be attempted, but a fallback locale covers a failure
         run: async () => {
           await delay(300);
-          throw new Error('Analytics endpoint unreachable');
+          throw new Error('Translation service unreachable');
         },
       };
 
-      return [config, auth, parallel([profile, cache, analytics])];
+      return [config, auth, parallel([profile, cache, translations])];
     }
 
     export function InitializerDemo() {
@@ -207,7 +209,7 @@ checkbox off to see a non-critical failure recorded without blocking the app.
 The minimal version — no custom splash/error UI, no `parallel()`, just tasks in order:
 
 ```tsx
-import { Initializer, useInitializer } from '@omnireact/initializer';
+import { Initializer, useInitializer } from '@omnireact/initializer/react';
 import type { InitializationTask } from '@omnireact/initializer';
 
 const initializeConfig: InitializationTask = {
@@ -244,11 +246,30 @@ screen while tasks run, and an error screen if a critical one fails. Both are pl
 overridable defaults — pass your own `splashScreen`/`errorScreen` components, as the demo
 above does, to replace them.
 
-- [Concepts](/initializer/concepts) — the dependency graph model, critical vs
-  non-critical failures, retry/timeout, `condition`, shared `state`, and the rendering
-  contract.
+- [Concepts](/initializer/concepts) — the stage model, critical vs non-critical failures,
+  retry/timeout, `condition`, shared `state`, and the rendering contract.
 - [API reference](/initializer/api-reference) — `InitializationTask`, `parallel()`,
   `<Initializer>` props, `useInitializer()`, and the framework-independent
   `createInitializer()`.
 - [Testing](/initializer/testing) — how to test components that call `useInitializer()`,
   and the task runner in isolation.
+
+## Non-goals
+
+`@omnireact/initializer` does exactly one thing: run a sequence of async startup steps
+before rendering the app. It is deliberately **not**:
+
+- **A data-fetching layer.** No caching, no request deduplication, no revalidation. Fetch
+  in `run`, store the result in `state` if a later stage needs it, and use a real
+  data-fetching library for anything your app needs *after* startup.
+- **A background job scheduler.** Tasks run once, during the one run a `<Initializer>`
+  instance (or `createInitializer()` call) drives — there's no recurring/scheduled
+  execution.
+- **A general dependency-graph runner.** Ordering is exactly two levels: the stage list,
+  and `parallel([...])` within a stage. There is no `dependsOn`, no cross-stage edges, and
+  no cycle detection to speak of, because there's no graph to have a cycle in.
+- **SSR/Suspense-integrated**, and it has **no cross-reload caching** — every mount (or
+  `retry()`) is a fresh run, fresh `state`, fresh `AbortController`.
+
+If you need any of the above, reach for a purpose-built tool instead and hand its result
+to a `state.set(...)` call from within a task.

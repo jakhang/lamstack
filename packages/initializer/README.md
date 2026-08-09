@@ -1,10 +1,12 @@
 # @omnireact/initializer
 
-A lightweight application-startup orchestrator for React. `<Initializer>` runs a
-dependency graph of async tasks — sequential, parallel, or explicitly interdependent —
-before rendering your app, with retry, timeout, and critical/non-critical failure
-handling built in. The task runner itself has no React dependency; the React layer is a
-thin adapter on top of it.
+A lightweight application-startup orchestrator for React. `<Initializer>` runs a sequence
+of stages — a task, or several running concurrently via `parallel([...])` — before
+rendering your app, with retry, timeout, and critical/non-critical failure handling built
+in. The task runner has no React dependency; the React layer is a thin adapter on top of
+it.
+
+> **Pre-1.0** (`0.x`): the API may still change between minor versions.
 
 ## Install
 
@@ -14,9 +16,15 @@ pnpm add @omnireact/initializer
 
 ## Usage
 
+The framework-independent core (`createInitializer`, `parallel`, task/state types) lives
+at the package root; `<Initializer>`/`useInitializer()` — the React layer, marked `'use
+client'` — live at `@omnireact/initializer/react`, so importing just the core never pulls
+a client-only boundary into a Server Component.
+
 ```tsx
-import { Initializer, parallel, useInitializer } from '@omnireact/initializer';
+import { parallel } from '@omnireact/initializer';
 import type { InitializationTask } from '@omnireact/initializer';
+import { Initializer, useInitializer } from '@omnireact/initializer/react';
 
 const initializeConfig: InitializationTask = {
   id: 'config',
@@ -34,17 +42,17 @@ const initializeAuth: InitializationTask = {
   },
 };
 
-const initializeAnalytics: InitializationTask = {
-  id: 'analytics',
-  critical: false, // optional — a failure here doesn't block the app
-  run: async () => {
-    await initAnalytics();
+const initializeTranslations: InitializationTask = {
+  id: 'translations',
+  critical: false, // must be attempted, but a fallback locale covers a failure
+  run: async ({ state }) => {
+    state.set('translations', await loadTranslations());
   },
 };
 
 function App() {
   return (
-    <Initializer tasks={[initializeConfig, initializeAuth, parallel([initializeAnalytics])]}>
+    <Initializer tasks={[initializeConfig, initializeAuth, parallel([initializeTranslations])]}>
       <Dashboard />
     </Initializer>
   );
@@ -58,35 +66,52 @@ function Dashboard() {
 
 ## Concepts
 
-- **Sequential by default** — tasks run one after another, in array order.
-- **`parallel([...])`** — batches tasks to run concurrently; the initializer waits for
-  every task in the batch before moving on to whatever comes next.
-- **`dependsOn: string[]`** — an explicit dependency on another task's `id`, for edges
-  that array position alone can't express (e.g. two tasks in the same `parallel()` batch
-  where one still needs to wait for the other).
-- **`critical`** — defaults to `true`: a failing task halts the whole sequence and shows
-  the error screen. Set `critical: false` for optional work (analytics, prefetching,
-  telemetry) that shouldn't block startup if it fails.
-- **`retry: number`** — total attempts (default 1, i.e. no retry), run back-to-back with
-  no delay.
-- **`timeout: number`** — max time in ms per attempt before it's treated as a failure.
-- **`condition`** — an optional async predicate; returning `false` skips the task (and,
-  transitively, anything that `dependsOn` it).
-- **Cascade skipping** — a task whose dependency didn't complete successfully (failed,
-  was skipped, or was cancelled) is itself skipped rather than run.
+- **Stages run in order** — `tasks` is a list of stages, each either one task or a
+  `parallel([...])` group; the run waits for a stage to fully settle before starting the
+  next one. There's no dependency graph and no `dependsOn` — that's the whole ordering
+  model.
+- **`parallel(tasks, { concurrency? })`** — runs its tasks concurrently as a single
+  stage. `concurrency` caps how many run at once (e.g. to avoid firing 50 simultaneous
+  requests) — omit it for no cap.
+- **`critical`** — defaults to `true`: a failing task aborts the whole run and shows the
+  error screen. Set `critical: false` for work that must be attempted before render but
+  can survive failing (e.g. loading translations, with a hardcoded fallback locale) — the
+  run continues to the next stage regardless.
+- **`retry`/`retryDelay`** — total attempts (default 1, no retry), with an optional delay
+  (a number, or `(attempt) => ms` for backoff) between them. Defaults to 0 (back-to-back).
+- **`timeout`** — max time in ms per attempt before it's treated as a failure — trips
+  `context.signal` for that specific attempt, so code that checks it (an abortable delay,
+  `fetch(url, { signal })`) can actually stop instead of running on in the background.
+- **`condition`** — an optional async predicate; returning `false` skips the task — the
+  only source of a `'skipped'` status. Everything that never got a chance to run because
+  the whole run was aborted (a critical failure, or manual `abort()`) ends up
+  `'cancelled'` instead.
+- **`label`** — optional human-readable name for UI, surfaced on `TaskSnapshot` — falls
+  back to `id` if unset.
 - **`state`** — a shared key/value bag passed to every task via context
-  (`{ signal, state }`), for passing data between tasks: `state.set('user', user)` in one
-  task, `state.get('user')` in a dependent one.
-- **Retry from the UI** — `useInitializer()` returns `{ status, progress, tasks, error,
-  retry, abort }`; the built-in error screen's "Retry" button calls `retry()` too.
-- **Custom UI** — pass `splashScreen`/`errorScreen` components to replace the plain
-  built-in defaults.
+  (`{ signal, state }`), for passing data between tasks. Stays readable once the run
+  finishes, via `getState()` (on the handle, or `useInitializer()`) or the `onComplete`
+  event. Parameterize `InitializationTask<{ user: User }>` (and
+  `createInitializer<{ user: User }>()` / `<Initializer<{ user: User }>>`) for
+  `state.get`/`.set` checked and inferred per key instead of `unknown`.
+- **Custom UI** — pass `splashScreen`/`errorScreen`/`cancelledScreen` components to
+  replace the plain built-in defaults. `minSplashDuration` keeps the splash up for a
+  minimum duration once shown, to avoid a jarring flash on runs that are fast but not
+  instant.
 - **Lifecycle events** — `onTaskStart`, `onTaskComplete`, `onTaskFailed`, `onComplete`,
   `onError`, `onAbort` props on `<Initializer>`, for logging/telemetry.
 
+## Debugging
+
+Outside `NODE_ENV=production`, `createInitializer` logs a `console.warn` for a task with
+`retry` set but no `timeout` (a hung attempt blocks every retry after it), and for a
+`critical: false` task placed in its own sequential stage (the next stage still waits for
+it to settle, even though its failure won't halt the run). Call `checkTasks(tasks)` to
+get these as a plain `string[]` yourself — e.g. to assert on in a test.
+
 ## Framework-independent core
 
-`createInitializer` runs the same task graph outside of React entirely:
+`createInitializer` runs the same stage list outside of React entirely:
 
 ```ts
 import { createInitializer } from '@omnireact/initializer';
@@ -95,9 +120,20 @@ const initializer = createInitializer({ tasks });
 initializer.subscribe(() => console.log(initializer.getSnapshot()));
 await initializer.run();
 
+console.log(initializer.getState().get('user'));
+
 // later, e.g. on unmount or navigation away:
 initializer.abort();
 ```
+
+## Non-goals
+
+`@omnireact/initializer` does exactly one thing: run a sequence of async startup steps
+before rendering the app. It is deliberately not a data-fetching layer, not a background
+job scheduler, and not a general dependency-graph runner — ordering is exactly the stage
+list plus `parallel()` within a stage, nothing more. It also has no SSR/Suspense
+integration and no cross-reload caching: every mount (or `retry()`) is a fresh run, fresh
+`state`, fresh `AbortController`.
 
 Full docs and API reference: **[omnireact-six.vercel.app/initializer](https://omnireact-six.vercel.app/initializer)**
 

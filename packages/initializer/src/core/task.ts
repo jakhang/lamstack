@@ -1,18 +1,17 @@
 import type { InitializationContext } from './context';
+import type { StateMap } from './state';
 
 /**
- * A single initialization task.
+ * A single initialization task. Parameterize with a `StateMap` (e.g.
+ * `InitializationTask<{ user: User }>`) to get `context.state.get`/`.set`
+ * type-checked per key instead of `unknown`-typed.
  */
-export interface InitializationTask {
-  /** Uniquely identifies the task — used for `dependsOn`, tracking, and error reporting. */
+export interface InitializationTask<S extends StateMap = StateMap> {
+  /** Uniquely identifies the task — used for tracking and error reporting. */
   id: string;
 
-  /**
-   * Ids of tasks that must complete successfully before this one starts, in
-   * addition to whatever ordering is implied by this task's position in the
-   * `tasks` array (see `parallel()` and the sequential-by-default rule).
-   */
-  dependsOn?: string[];
+  /** Human-readable name for UI (splash/error screens) — falls back to `id` if unset. */
+  label?: string;
 
   /**
    * Whether a failure of this task halts the entire initialization.
@@ -23,41 +22,71 @@ export interface InitializationTask {
 
   /**
    * Maximum number of attempts (the first try plus retries). Defaults to 1
-   * (no retry). Attempts run immediately one after another, no backoff.
+   * (no retry).
    */
   retry?: number;
+
+  /**
+   * Delay (ms) before each retry — not before the first attempt, and not
+   * after the last one. A number applies the same delay every time; a
+   * function `(attempt) => ms` receives the 1-based attempt that just failed,
+   * for custom backoff (e.g. exponential: `(n) => 2 ** n * 100`). Defaults to
+   * 0 — attempts run back-to-back, as before.
+   */
+  retryDelay?: number | ((attempt: number) => number);
 
   /** Maximum time (ms) allowed per attempt before it's treated as a failure. */
   timeout?: number;
 
   /**
    * Optional predicate deciding whether to run this task at all. Returning
-   * `false` skips the task (and, transitively, anything that `dependsOn`
-   * it). A throwing/rejecting `condition` is treated as a task failure.
+   * `false` skips it — the only source of a `'skipped'` status. A
+   * throwing/rejecting `condition` is treated as a task failure.
    */
-  condition?: (context: InitializationContext) => boolean | Promise<boolean>;
+  condition?: (context: InitializationContext<S>) => boolean | Promise<boolean>;
 
-  /** The task's actual work. */
-  run(context: InitializationContext): Promise<void>;
+  /**
+   * The task's actual work. Written as `run: (context) => ...` (a property,
+   * not method shorthand) so the parameter is checked contravariantly rather
+   * than bivariantly — method shorthand silently accepts a `run` typed for
+   * an incompatible narrower/wider context. May return `void` for
+   * synchronous work — it doesn't have to be an async function that awaits
+   * nothing just to satisfy the type.
+   */
+  run: (context: InitializationContext<S>) => void | Promise<void>;
 }
 
-/** A batch of tasks that run concurrently against the same set of dependencies. */
-export interface ParallelGroup {
+export interface ParallelOptions {
+  /**
+   * Max number of this group's tasks running at once (e.g. to cap
+   * simultaneous network requests when batching many independent fetches).
+   * Defaults to unlimited — every task in the group starts together, as soon
+   * as the previous stage has settled.
+   */
+  concurrency?: number;
+}
+
+/** A stage whose tasks all run concurrently, rather than one task alone. */
+export interface ParallelGroup<S extends StateMap = StateMap> {
   type: 'parallel';
-  tasks: InitializationTask[];
+  tasks: InitializationTask<S>[];
+  concurrency?: number;
 }
 
-export type TaskEntry = InitializationTask | ParallelGroup;
+export type TaskEntry<S extends StateMap = StateMap> = InitializationTask<S> | ParallelGroup<S>;
 
 /**
  * Marks a batch of tasks as safe to run concurrently. Use only for tasks
  * that are independent of each other — the initializer waits for the whole
  * group to settle before moving on to whatever comes next.
  */
-export function parallel(tasks: InitializationTask[]): ParallelGroup {
-  return { type: 'parallel', tasks };
+export function parallel<S extends StateMap = StateMap>(
+  tasks: InitializationTask<S>[],
+  options?: ParallelOptions,
+): ParallelGroup<S> {
+  return { type: 'parallel', tasks, concurrency: options?.concurrency };
 }
 
-export function isParallelGroup(entry: TaskEntry): entry is ParallelGroup {
+export function isParallelGroup<S extends StateMap = StateMap>(entry: TaskEntry<S>): entry is ParallelGroup<S> {
   return 'type' in entry && entry.type === 'parallel';
 }

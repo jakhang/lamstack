@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildGraph, executeGraph, InitializerTimeoutError } from './runner';
+import { runStages, InitializerTimeoutError } from './runner';
 import { createInitializationState } from './state';
 import { parallel, type InitializationTask } from './task';
-import type { RunnerEvents, RunnerSnapshot } from './runner';
+import type { InitializerEvents, InitializerSnapshot } from './runner';
+import type { TaskEntry } from './task';
 
 function task(id: string, overrides: Partial<InitializationTask> = {}): InitializationTask {
   return { id, run: async () => {}, ...overrides };
@@ -22,66 +23,42 @@ function tick() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
+const completed = (id: string, critical = true) => ({
+  id,
+  status: 'completed' as const,
+  critical,
+  durationMs: expect.any(Number),
+});
+const skipped = (id: string, critical = true) => ({ id, status: 'skipped' as const, critical });
+const cancelled = (id: string, critical = true) => ({ id, status: 'cancelled' as const, critical });
+const failed = (id: string, critical = true) => ({
+  id,
+  status: 'failed' as const,
+  critical,
+  error: expect.anything(),
+  durationMs: expect.any(Number),
+});
+
 /** Runs `entries` to completion with no-op events/snapshots by default. */
-async function run(
-  entries: Parameters<typeof buildGraph>[0],
-  events: RunnerEvents = {},
-  ac = new AbortController(),
-) {
-  const nodes = buildGraph(entries);
+async function run(entries: TaskEntry[], events: InitializerEvents = {}, ac = new AbortController()) {
   const state = createInitializationState();
-  const snapshots: RunnerSnapshot[] = [];
-  const result = await executeGraph(nodes, ac, state, events, (s) => snapshots.push(s));
+  const snapshots: InitializerSnapshot[] = [];
+  const result = await runStages(entries, ac, state, events, (s) => snapshots.push(s));
   return { result, snapshots, finalSnapshot: snapshots[snapshots.length - 1] };
 }
 
-describe('buildGraph', () => {
-  it('makes each sequential task depend only on the one before it', () => {
-    const nodes = buildGraph([task('a'), task('b'), task('c')]);
-    expect(nodes.get('a')!.dependsOn).toEqual(new Set());
-    expect(nodes.get('b')!.dependsOn).toEqual(new Set(['a']));
-    expect(nodes.get('c')!.dependsOn).toEqual(new Set(['b']));
+describe('runStages — validation', () => {
+  it('throws on a duplicate task id across separate stages', async () => {
+    await expect(run([task('a'), task('a')])).rejects.toThrow(/Duplicate task id/);
   });
 
-  it('makes parallel-group members depend on the prior barrier, not each other', () => {
-    const nodes = buildGraph([task('a'), parallel([task('b'), task('c')]), task('d')]);
-    expect(nodes.get('b')!.dependsOn).toEqual(new Set(['a']));
-    expect(nodes.get('c')!.dependsOn).toEqual(new Set(['a']));
-    expect(nodes.get('d')!.dependsOn).toEqual(new Set(['b', 'c']));
-  });
-
-  it('unions explicit dependsOn with the position-derived dependency', () => {
-    const nodes = buildGraph([task('a'), task('b', { dependsOn: ['a'] })]);
-    expect(nodes.get('b')!.dependsOn).toEqual(new Set(['a']));
-  });
-
-  it('throws on a duplicate task id', () => {
-    expect(() => buildGraph([task('a'), task('a')])).toThrow(/Duplicate task id/);
-  });
-
-  it('throws when dependsOn references an unknown task', () => {
-    expect(() => buildGraph([task('a', { dependsOn: ['ghost'] })])).toThrow(/unknown task/);
-  });
-
-  it('throws on a direct circular dependency', () => {
-    expect(() =>
-      buildGraph([task('a', { dependsOn: ['b'] }), task('b', { dependsOn: ['a'] })]),
-    ).toThrow(/Circular dependency/);
-  });
-
-  it('throws on an indirect circular dependency', () => {
-    expect(() =>
-      buildGraph([
-        task('a', { dependsOn: ['c'] }),
-        task('b', { dependsOn: ['a'] }),
-        task('c', { dependsOn: ['b'] }),
-      ]),
-    ).toThrow(/Circular dependency/);
+  it('throws on a duplicate task id within the same parallel() group', async () => {
+    await expect(run([parallel([task('a'), task('a')])])).rejects.toThrow(/Duplicate task id/);
   });
 });
 
-describe('executeGraph — ordering', () => {
-  it('runs sequential tasks strictly in order', async () => {
+describe('runStages — ordering', () => {
+  it('runs sequential tasks (one-task stages) strictly in order', async () => {
     const order: string[] = [];
     const entries = ['a', 'b', 'c'].map((id) => task(id, { run: async () => void order.push(id) }));
     await run(entries);
@@ -120,7 +97,7 @@ describe('executeGraph — ordering', () => {
     expect(order).toEqual(['b-start', 'c-start', 'c-end', 'b-end']);
   });
 
-  it('waits for every member of a parallel group before running what follows', async () => {
+  it('waits for every member of a parallel group (stage) before running what follows', async () => {
     const order: string[] = [];
     const dB = deferred();
     const b = task('b', {
@@ -141,29 +118,19 @@ describe('executeGraph — ordering', () => {
     expect(order).toEqual(['c', 'b', 'd']);
   });
 
-  it('lets explicit dependsOn order two tasks inside the same parallel group', async () => {
+  it('an empty parallel([]) stage is a pure no-op and does not affect ordering', async () => {
     const order: string[] = [];
-    const dC = deferred();
-    const c = task('c', {
-      run: async () => {
-        order.push('c-start');
-        await dC.promise;
-        order.push('c-end');
-      },
-    });
-    const d = task('d', { dependsOn: ['c'], run: async () => void order.push('d-start') });
-
-    const runPromise = run([parallel([c, d])]);
-    await tick();
-    expect(order).toEqual(['c-start']);
-
-    dC.resolve();
+    const runPromise = run([
+      task('a', { run: async () => void order.push('a') }),
+      parallel([]),
+      task('b', { run: async () => void order.push('b') }),
+    ]);
     await runPromise;
-    expect(order).toEqual(['c-start', 'c-end', 'd-start']);
+    expect(order).toEqual(['a', 'b']);
   });
 });
 
-describe('executeGraph — retry', () => {
+describe('runStages — retry', () => {
   it('retries a failing task and succeeds within the retry budget', async () => {
     let attempts = 0;
     const t = task('a', {
@@ -175,7 +142,7 @@ describe('executeGraph — retry', () => {
     });
     const { finalSnapshot } = await run([t]);
     expect(attempts).toBe(3);
-    expect(finalSnapshot.tasks).toEqual([{ id: 'a', status: 'completed' }]);
+    expect(finalSnapshot.tasks).toEqual([completed('a')]);
   });
 
   it('marks the task failed after exhausting all retry attempts', async () => {
@@ -189,11 +156,76 @@ describe('executeGraph — retry', () => {
     });
     const { finalSnapshot } = await run([t]);
     expect(attempts).toBe(2);
-    expect(finalSnapshot.tasks).toEqual([{ id: 'a', status: 'failed' }]);
+    expect(finalSnapshot.tasks).toEqual([failed('a')]);
+  });
+
+  it('waits `retryDelay` ms between attempts, not before the first or after the last', async () => {
+    const timestamps: number[] = [];
+    const t = task('a', {
+      retry: 3,
+      retryDelay: 30,
+      run: async () => {
+        timestamps.push(Date.now());
+        throw new Error('always fails');
+      },
+    });
+    await run([t]);
+    expect(timestamps).toHaveLength(3);
+    expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(25);
+    expect(timestamps[2] - timestamps[1]).toBeGreaterThanOrEqual(25);
+  });
+
+  it('supports a retryDelay function, called once per retry (not per attempt)', async () => {
+    const seenAttempts: number[] = [];
+    const t = task('a', {
+      retry: 3,
+      retryDelay: (attempt) => {
+        seenAttempts.push(attempt);
+        return 1;
+      },
+      run: async () => {
+        throw new Error('always fails');
+      },
+    });
+    await run([t]);
+    expect(seenAttempts).toEqual([1, 2]);
+  });
+
+  it('defaults retryDelay to 0 — attempts still run back-to-back when unset', async () => {
+    const timestamps: number[] = [];
+    const t = task('a', {
+      retry: 3,
+      run: async () => {
+        timestamps.push(Date.now());
+        throw new Error('always fails');
+      },
+    });
+    const start = Date.now();
+    await run([t]);
+    expect(Date.now() - start).toBeLessThan(25);
+    expect(timestamps).toHaveLength(3);
   });
 });
 
-describe('executeGraph — timeout', () => {
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
+}
+
+describe('runStages — timeout', () => {
   it('treats an attempt exceeding `timeout` as a failure', async () => {
     const onTaskFailed = vi.fn();
     const t = task('a', {
@@ -201,12 +233,106 @@ describe('executeGraph — timeout', () => {
       run: () => new Promise(() => {}), // never resolves
     });
     const { finalSnapshot } = await run([t], { onTaskFailed });
-    expect(finalSnapshot.tasks).toEqual([{ id: 'a', status: 'failed' }]);
+    expect(finalSnapshot.tasks).toEqual([failed('a')]);
     expect(onTaskFailed).toHaveBeenCalledWith(t, expect.any(InitializerTimeoutError));
+  });
+
+  it('warns via console.warn once a task has run past 50% of its timeout budget', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const t = task('a', { timeout: 20, run: () => new Promise(() => {}) }); // never resolves
+    await run([t]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Task "a" is still running past 50% of its 20ms timeout'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn about the halfway point for a task that finishes well within its timeout', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await run([task('a', { timeout: 1000 })]);
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('trips a per-attempt signal on timeout, so at most one retry attempt is ever truly in flight', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const t = task('slow', {
+      timeout: 20,
+      retry: 3,
+      run: async ({ signal }) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        try {
+          await abortableDelay(200, signal);
+        } finally {
+          inFlight -= 1;
+        }
+      },
+    });
+    const { finalSnapshot } = await run([t]);
+    expect(maxInFlight).toBe(1);
+    expect(inFlight).toBe(0);
+    expect(finalSnapshot.tasks).toEqual([failed('slow')]);
+  });
+
+  it('a per-attempt timeout does not abort the whole run', async () => {
+    const ac = new AbortController();
+    const t = task('slow', {
+      critical: false,
+      timeout: 20,
+      run: async ({ signal }) => {
+        await abortableDelay(200, signal);
+      },
+    });
+    const { result } = await run([t], {}, ac);
+    expect(ac.signal.aborted).toBe(false);
+    expect(result.error).toBeNull();
   });
 });
 
-describe('executeGraph — critical vs non-critical failure', () => {
+describe('runStages — concurrency (parallel options)', () => {
+  it('parallel(tasks, { concurrency }) caps how many run at once', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const makeTask = (id: string) =>
+      task(id, {
+        run: async () => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await tick();
+          inFlight -= 1;
+        },
+      });
+    const tasks = ['a', 'b', 'c', 'd', 'e'].map(makeTask);
+
+    await run([parallel(tasks, { concurrency: 2 })]);
+
+    expect(maxInFlight).toBe(2);
+    expect(inFlight).toBe(0);
+  });
+
+  it('does not cap concurrency when no `concurrency` option is given', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const makeTask = (id: string) =>
+      task(id, {
+        run: async () => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await tick();
+          inFlight -= 1;
+        },
+      });
+    const tasks = ['a', 'b', 'c'].map(makeTask);
+
+    await run([parallel(tasks)]);
+
+    expect(maxInFlight).toBe(3);
+  });
+});
+
+describe('runStages — critical vs non-critical failure', () => {
   it('defaults to critical: a failing task records the top-level error', async () => {
     const t = task('a', {
       run: async () => {
@@ -217,7 +343,7 @@ describe('executeGraph — critical vs non-critical failure', () => {
     expect(result.error).toEqual({ taskId: 'a', error: expect.any(Error) });
   });
 
-  it('a critical failure skips dependent tasks and does not run them', async () => {
+  it('a critical failure aborts the run, so a later stage never starts and ends up cancelled', async () => {
     const runB = vi.fn(async () => {});
     const a = task('a', {
       run: async () => {
@@ -227,13 +353,25 @@ describe('executeGraph — critical vs non-critical failure', () => {
     const b = task('b', { run: runB });
     const { finalSnapshot } = await run([a, b]);
     expect(runB).not.toHaveBeenCalled();
-    expect(finalSnapshot.tasks).toEqual([
-      { id: 'a', status: 'failed' },
-      { id: 'b', status: 'skipped' },
-    ]);
+    expect(finalSnapshot.tasks).toEqual([failed('a'), cancelled('b')]);
   });
 
-  it('a non-critical failure does not record a top-level error and independent tasks still run', async () => {
+  it('a non-critical failure does not record a top-level error, and a later stage still runs normally', async () => {
+    const runB = vi.fn(async () => {});
+    const a = task('a', {
+      critical: false,
+      run: async () => {
+        throw new Error('boom');
+      },
+    });
+    const b = task('b', { run: runB });
+    const { result, finalSnapshot } = await run([a, b]);
+    expect(result.error).toBeNull();
+    expect(runB).toHaveBeenCalledTimes(1);
+    expect(finalSnapshot.tasks).toEqual([failed('a', false), completed('b')]);
+  });
+
+  it('a non-critical failure within a shared stage does not stop siblings in that same stage', async () => {
     const runB = vi.fn(async () => {});
     const a = task('a', {
       critical: false,
@@ -245,61 +383,60 @@ describe('executeGraph — critical vs non-critical failure', () => {
     const { result, finalSnapshot } = await run([parallel([a, b])]);
     expect(result.error).toBeNull();
     expect(runB).toHaveBeenCalledTimes(1);
-    expect(finalSnapshot.tasks).toEqual(
-      expect.arrayContaining([
-        { id: 'a', status: 'failed' },
-        { id: 'b', status: 'completed' },
-      ]),
-    );
+    expect(finalSnapshot.tasks).toEqual(expect.arrayContaining([failed('a', false), completed('b')]));
   });
 
-  it('skips a task that depends on a non-critical task that failed', async () => {
-    const runB = vi.fn(async () => {});
-    const a = task('a', {
-      critical: false,
-      run: async () => {
-        throw new Error('boom');
-      },
-    });
-    const b = task('b', { run: runB });
-    const { finalSnapshot } = await run([a, b]);
-    expect(runB).not.toHaveBeenCalled();
-    expect(finalSnapshot.tasks).toEqual([
-      { id: 'a', status: 'failed' },
-      { id: 'b', status: 'skipped' },
-    ]);
+  it('task-1 regression: [config, analytics(critical:false, throws), auth(critical:true)] — auth actually runs', async () => {
+    const authRan = vi.fn();
+    const entries = [
+      task('config'),
+      task('analytics', {
+        critical: false,
+        run: async () => {
+          throw new Error('down');
+        },
+      }),
+      task('auth', { critical: true, run: async () => void authRan() }),
+    ];
+    const { result, finalSnapshot } = await run(entries);
+    expect(authRan).toHaveBeenCalledTimes(1);
+    expect(result.error).toBeNull();
+    expect(finalSnapshot.tasks).toEqual([completed('config'), failed('analytics', false), completed('auth')]);
   });
 });
 
-describe('executeGraph — condition', () => {
-  it('skips the task without running it when condition resolves false', async () => {
+describe('runStages — condition', () => {
+  it('skips the task without running it when condition resolves false — the only source of "skipped"', async () => {
     const runSpy = vi.fn(async () => {});
     const t = task('a', { condition: async () => false, run: runSpy });
     const { finalSnapshot } = await run([t]);
     expect(runSpy).not.toHaveBeenCalled();
-    expect(finalSnapshot.tasks).toEqual([{ id: 'a', status: 'skipped' }]);
+    expect(finalSnapshot.tasks).toEqual([skipped('a')]);
   });
 
   it('runs the task normally when condition resolves true', async () => {
     const t = task('a', { condition: async () => true });
     const { finalSnapshot } = await run([t]);
-    expect(finalSnapshot.tasks).toEqual([{ id: 'a', status: 'completed' }]);
+    expect(finalSnapshot.tasks).toEqual([completed('a')]);
   });
 
-  it('treats a throwing condition as a task failure that respects `critical`', async () => {
+  it('treats a throwing condition as a task failure that respects `critical` — no durationMs, since `run` never started', async () => {
     const t = task('a', {
       condition: async () => {
         throw new Error('condition exploded');
       },
     });
     const { result, finalSnapshot } = await run([t]);
-    expect(finalSnapshot.tasks).toEqual([{ id: 'a', status: 'failed' }]);
+    expect(finalSnapshot.tasks).toEqual([
+      { id: 'a', status: 'failed', critical: true, error: expect.any(Error) },
+    ]);
+    expect(finalSnapshot.tasks[0]).not.toHaveProperty('durationMs');
     expect(result.error).toEqual({ taskId: 'a', error: expect.any(Error) });
   });
 });
 
-describe('executeGraph — cancellation', () => {
-  it('marks concurrent in-flight, independent tasks cancelled once the whole graph is aborted', async () => {
+describe('runStages — cancellation', () => {
+  it('marks concurrent in-flight, independent tasks cancelled once the whole run is aborted', async () => {
     const ac = new AbortController();
     const dA = deferred();
     const dB = deferred();
@@ -313,15 +450,10 @@ describe('executeGraph — cancellation', () => {
     dB.resolve();
     const { finalSnapshot } = await runPromise;
 
-    expect(finalSnapshot.tasks).toEqual(
-      expect.arrayContaining([
-        { id: 'a', status: 'cancelled' },
-        { id: 'b', status: 'cancelled' },
-      ]),
-    );
+    expect(finalSnapshot.tasks).toEqual(expect.arrayContaining([cancelled('a'), cancelled('b')]));
   });
 
-  it('cascades a dependent task to "skipped" when its dependency was cancelled by an abort', async () => {
+  it('a later stage ends up cancelled (not skipped) once an earlier stage was aborted', async () => {
     const ac = new AbortController();
     const dA = deferred();
     const a = task('a', {
@@ -329,7 +461,7 @@ describe('executeGraph — cancellation', () => {
         await dA.promise;
       },
     });
-    const b = task('b'); // sequential — depends on `a` by position
+    const b = task('b');
 
     const runPromise = run([a, b], {}, ac);
     await tick();
@@ -337,14 +469,11 @@ describe('executeGraph — cancellation', () => {
     dA.resolve();
     const { finalSnapshot } = await runPromise;
 
-    expect(finalSnapshot.tasks).toEqual([
-      { id: 'a', status: 'cancelled' },
-      { id: 'b', status: 'skipped' },
-    ]);
+    expect(finalSnapshot.tasks).toEqual([cancelled('a'), cancelled('b')]);
   });
 });
 
-describe('executeGraph — progress', () => {
+describe('runStages — progress', () => {
   it('reflects settled/total, reaching 100 when everything has settled', async () => {
     const { snapshots } = await run([task('a'), task('b')]);
     const progressValues = snapshots.map((s) => s.progress);
@@ -359,7 +488,7 @@ describe('executeGraph — progress', () => {
   });
 });
 
-describe('executeGraph — lifecycle events', () => {
+describe('runStages — lifecycle events', () => {
   it('fires onTaskStart/onTaskComplete for a successful task', async () => {
     const onTaskStart = vi.fn();
     const onTaskComplete = vi.fn();

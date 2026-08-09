@@ -1,6 +1,6 @@
 {
   "name": "@omnireact/dialog",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Headless, imperative dialog API for React (alert/confirm/prompt + custom dialogs).",
   "keywords": [
     "react",

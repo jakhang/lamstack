@@ -1,14 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { Initializer, parallel, useInitializer } from '@omnireact/initializer';
-import type {
-  ErrorScreenProps,
-  InitializationTask,
-  SplashScreenProps,
-  TaskEntry,
-  TaskSnapshot,
-} from '@omnireact/initializer';
+import { parallel } from '@omnireact/initializer';
+import type { InitializationTask, TaskEntry, TaskSnapshot } from '@omnireact/initializer';
+import { Initializer, useInitializer } from '@omnireact/initializer/react';
+import type { ErrorScreenProps, SplashScreenProps } from '@omnireact/initializer/react';
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -105,20 +101,20 @@ function buildTasks(failAuth: boolean): TaskEntry[] {
     },
   };
 
-  // These three all depend on `auth` by position — if auth fails, all three
-  // are cascade-skipped rather than run (try the checkbox below).
+  // This whole stage runs after `auth` settles — if auth fails, the run
+  // aborts and none of these three ever start (try the checkbox below).
   const profile: InitializationTask = { id: 'profile', run: () => delay(500) };
   const cache: InitializationTask = { id: 'cache', run: () => delay(350) };
-  const analytics: InitializationTask = {
-    id: 'analytics',
-    critical: false, // optional — its failure doesn't block the app
+  const translations: InitializationTask = {
+    id: 'translations',
+    critical: false, // must be attempted, but a fallback locale covers a failure
     run: async () => {
       await delay(300);
-      throw new Error('Analytics endpoint unreachable');
+      throw new Error('Translation service unreachable');
     },
   };
 
-  return [config, auth, parallel([profile, cache, analytics])];
+  return [config, auth, parallel([profile, cache, translations])];
 }
 
 export function InitializerDemo() {

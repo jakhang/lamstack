@@ -27,10 +27,8 @@ describe('createInitializer', () => {
     expect(handle.getSnapshot().error).toBeNull();
   });
 
-  it('throws synchronously at creation time for a malformed graph, not at run()', () => {
-    expect(() =>
-      createInitializer({ tasks: [task('a', { dependsOn: ['ghost'] })] }),
-    ).toThrow(/unknown task/);
+  it('throws synchronously at creation time for a duplicate task id, not at run()', () => {
+    expect(() => createInitializer({ tasks: [task('a'), task('a')] })).toThrow(/Duplicate task id/);
   });
 
   it('ends in "failed" with the recorded error when a critical task fails', async () => {
@@ -112,6 +110,43 @@ describe('createInitializer', () => {
     expect(listener.mock.calls.length).toBe(callsBeforeUnsub);
   });
 
+  it('task-1 regression: a failing critical:false task does not swallow a later critical task', async () => {
+    const onComplete = vi.fn();
+    const onError = vi.fn();
+    const authRan = vi.fn();
+    const handle = createInitializer({
+      tasks: [
+        task('config'),
+        task('analytics', {
+          critical: false,
+          run: async () => {
+            throw new Error('down');
+          },
+        }),
+        task('auth', { critical: true, run: async () => void authRan() }),
+      ],
+      onComplete,
+      onError,
+    });
+    await handle.run();
+
+    expect(authRan).toHaveBeenCalledTimes(1);
+    expect(handle.getSnapshot().tasks).toEqual([
+      { id: 'config', status: 'completed', critical: true, durationMs: expect.any(Number) },
+      {
+        id: 'analytics',
+        status: 'failed',
+        critical: false,
+        error: expect.any(Error),
+        durationMs: expect.any(Number),
+      },
+      { id: 'auth', status: 'completed', critical: true, durationMs: expect.any(Number) },
+    ]);
+    expect(handle.getSnapshot().status).toBe('completed');
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('abort() before run() prevents any task from starting', async () => {
     const runSpy = vi.fn(async () => {});
     const handle = createInitializer({ tasks: [task('a', { run: runSpy })] });
@@ -119,5 +154,30 @@ describe('createInitializer', () => {
     await handle.run();
     expect(runSpy).not.toHaveBeenCalled();
     expect(handle.getSnapshot().status).toBe('cancelled');
+  });
+});
+
+describe('createInitializer — shared state (task 6)', () => {
+  it('getState() exposes what tasks wrote via state.set(...), readable after the run completes', async () => {
+    type AppState = { user: { id: number } };
+    const handle = createInitializer<AppState>({
+      tasks: [task('load-user', { run: ({ state }) => void state.set('user', { id: 42 }) })],
+    });
+    await handle.run();
+    expect(handle.getState().get('user')).toEqual({ id: 42 });
+  });
+
+  it('onComplete receives the same final state', async () => {
+    type AppState = { config: string };
+    const onComplete = vi.fn();
+    const handle = createInitializer<AppState>({
+      tasks: [task('load-config', { run: ({ state }) => void state.set('config', 'ready') })],
+      onComplete,
+    });
+    await handle.run();
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    const stateArg = onComplete.mock.calls[0][0];
+    expect(stateArg.get('config')).toBe('ready');
+    expect(stateArg).toBe(handle.getState());
   });
 });

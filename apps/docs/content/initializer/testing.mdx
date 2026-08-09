@@ -63,7 +63,7 @@ app need `waitFor` — the same reason `@omnireact/dialog`'s async `open()` call
 ```tsx
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { Initializer } from '@omnireact/initializer';
+import { Initializer } from '@omnireact/initializer/react';
 
 it('renders the app once initialization completes', async () => {
   render(
@@ -150,6 +150,6 @@ it('retry() restarts the sequence', async () => {
 ([`packages/initializer/src/core`](https://github.com/jakhang/omnireact/blob/main/packages/initializer/src/core)
 and
 [`.../src/react/Initializer.test.tsx`](https://github.com/jakhang/omnireact/blob/main/packages/initializer/src/react/Initializer.test.tsx))
-covers the full matrix — parallel execution, `dependsOn` ordering, retry, timeout,
-critical/non-critical failures, `condition`, cascade skipping, and cancellation — worth
-reading if you need to test any of those edge cases in your own app.
+covers the full matrix — stage ordering, `parallel()` concurrency (and `concurrency`
+caps), retry/`retryDelay`, timeout, critical/non-critical failures, `condition`, and
+cancellation — worth reading if you need to test any of those edge cases in your own app.

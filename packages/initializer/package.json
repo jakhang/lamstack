@@ -1,0 +1,64 @@
+{
+  "name": "@omnireact/initializer",
+  "version": "0.1.0",
+  "description": "Headless app-startup orchestrator for React — run async init steps (with parallel batching, abort, and retry) before rendering your app.",
+  "keywords": [
+    "react",
+    "initializer",
+    "bootstrap",
+    "startup",
+    "splash-screen",
+    "headless",
+    "omnireact"
+  ],
+  "license": "MIT",
+  "author": "Ja Khang",
+  "homepage": "https://omnireact-six.vercel.app/initializer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jakhang/omnireact.git",
+    "directory": "packages/initializer"
+  },
+  "bugs": {
+    "url": "https://github.com/jakhang/omnireact/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@omnireact/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

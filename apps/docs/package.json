@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "prebuild": "pnpm --filter @omnireact/core --filter @omnireact/dialog run build",
+    "prebuild": "pnpm --filter @omnireact/core --filter @omnireact/dialog --filter @omnireact/initializer run build",
     "build": "next build --webpack",
     "postbuild": "pagefind --site .next/server/app --output-path public/_pagefind",
     "start": "next start",
@@ -21,6 +21,7 @@
     "@mui/material-nextjs": "^9.3.0",
     "@omnireact/core": "workspace:*",
     "@omnireact/dialog": "workspace:*",
+    "@omnireact/initializer": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.30.0",

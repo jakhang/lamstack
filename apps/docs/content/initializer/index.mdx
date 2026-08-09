@@ -1,0 +1,254 @@
+import { Tabs } from 'nextra/components';
+import { InitializerDemo } from '../../components/initializer-demo';
+
+# @omnireact/initializer
+
+A lightweight application-startup orchestrator for React. `<Initializer>` runs a
+dependency graph of async tasks — sequential, parallel, or explicitly interdependent —
+before rendering your app, with retry, timeout, and critical/non-critical failure
+handling built in. The task runner has no React dependency; the React layer is a thin
+adapter on top of it.
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tabs.Tab>
+    ```bash
+    pnpm add @omnireact/initializer
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    npm install @omnireact/initializer
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    yarn add @omnireact/initializer
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    bun add @omnireact/initializer
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Live demo
+
+Five tasks: `config` runs first, then `auth` (critical — its failure halts everything),
+then a `parallel([...])` batch of `profile`/`cache`/`analytics` — all three depend on
+`auth` by array position, so if `auth` fails they're cascade-**skipped** rather than run.
+`analytics` is marked `critical: false` and always fails on its own — try it with the
+checkbox off to see a non-critical failure recorded without blocking the app.
+
+<Tabs items={['Preview', 'Code']}>
+  <Tabs.Tab>
+    <InitializerDemo />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    The complete, real source behind the preview above — nothing hidden or simplified
+    ([view on GitHub](https://github.com/jakhang/omnireact/blob/main/apps/docs/components/initializer-demo.tsx)):
+
+    ```tsx
+    'use client';
+
+    import * as React from 'react';
+    import { Initializer, parallel, useInitializer } from '@omnireact/initializer';
+    import type {
+      ErrorScreenProps,
+      InitializationTask,
+      SplashScreenProps,
+      TaskEntry,
+      TaskSnapshot,
+    } from '@omnireact/initializer';
+
+    function delay(ms: number): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    const STATUS_STYLE: Record<TaskSnapshot['status'], { icon: string; className: string }> = {
+      pending: { icon: '○', className: 'text-neutral-400 dark:text-neutral-600' },
+      running: { icon: '◐', className: 'text-blue-500 animate-pulse' },
+      completed: { icon: '●', className: 'text-emerald-500' },
+      failed: { icon: '✕', className: 'text-red-500' },
+      skipped: { icon: '–', className: 'text-neutral-400 dark:text-neutral-600' },
+      cancelled: { icon: '⊘', className: 'text-neutral-400 dark:text-neutral-600' },
+    };
+
+    function TaskList({ tasks }: { tasks: TaskSnapshot[] }) {
+      return (
+        <ul className="space-y-1.5 font-mono text-sm">
+          {tasks.map((task) => {
+            const style = STATUS_STYLE[task.status];
+            return (
+              <li key={task.id} className="flex items-center gap-2">
+                <span className={style.className}>{style.icon}</span>
+                <span className="text-neutral-700 dark:text-neutral-300">{task.id}</span>
+                <span className="text-neutral-400 dark:text-neutral-600">{task.status}</span>
+              </li>
+            );
+          })}
+        </ul>
+      );
+    }
+
+    function DemoSplashScreen({ progress, tasks }: SplashScreenProps) {
+      return (
+        <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+            <div
+              className="h-full rounded-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <TaskList tasks={tasks} />
+        </div>
+      );
+    }
+
+    function DemoErrorScreen({ error, retry }: ErrorScreenProps) {
+      return (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+          <p className="text-sm font-medium text-red-700 dark:text-red-400">
+            Task &quot;{error.taskId}&quot; failed: {String(error.error)}
+          </p>
+          <button
+            onClick={retry}
+            className="mt-3 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    function ReadyPanel() {
+      const { tasks, retry } = useInitializer();
+      return (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            ✓ App ready — every required task settled.
+          </p>
+          <div className="mt-3">
+            <TaskList tasks={tasks} />
+          </div>
+          <button
+            onClick={retry}
+            className="mt-3 rounded-md px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Run again
+          </button>
+        </div>
+      );
+    }
+
+    function buildTasks(failAuth: boolean): TaskEntry[] {
+      const config: InitializationTask = {
+        id: 'config',
+        run: () => delay(400),
+      };
+
+      const auth: InitializationTask = {
+        id: 'auth',
+        critical: true,
+        run: async () => {
+          await delay(600);
+          if (failAuth) throw new Error('Session expired');
+        },
+      };
+
+      // These three all depend on `auth` by position — if auth fails, all
+      // three are cascade-skipped rather than run.
+      const profile: InitializationTask = { id: 'profile', run: () => delay(500) };
+      const cache: InitializationTask = { id: 'cache', run: () => delay(350) };
+      const analytics: InitializationTask = {
+        id: 'analytics',
+        critical: false, // optional — its failure doesn't block the app
+        run: async () => {
+          await delay(300);
+          throw new Error('Analytics endpoint unreachable');
+        },
+      };
+
+      return [config, auth, parallel([profile, cache, analytics])];
+    }
+
+    export function InitializerDemo() {
+      const [failAuth, setFailAuth] = React.useState(false);
+
+      // tasks is only re-read by <Initializer> when a run (re)starts —
+      // toggling this alone won't affect a run already in progress or
+      // already completed. Click Retry/Run again afterwards to apply it.
+      const tasks = React.useMemo(() => buildTasks(failAuth), [failAuth]);
+
+      return (
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+            <input
+              type="checkbox"
+              checked={failAuth}
+              onChange={(event) => setFailAuth(event.target.checked)}
+            />
+            Simulate auth failure (then Retry/Run again to apply)
+          </label>
+
+          <Initializer tasks={tasks} splashScreen={DemoSplashScreen} errorScreen={DemoErrorScreen}>
+            <ReadyPanel />
+          </Initializer>
+        </div>
+      );
+    }
+    ```
+
+  </Tabs.Tab>
+</Tabs>
+
+## Quickstart
+
+The minimal version — no custom splash/error UI, no `parallel()`, just tasks in order:
+
+```tsx
+import { Initializer, useInitializer } from '@omnireact/initializer';
+import type { InitializationTask } from '@omnireact/initializer';
+
+const initializeConfig: InitializationTask = {
+  id: 'config',
+  run: async ({ state }) => {
+    state.set('config', await loadConfig());
+  },
+};
+
+const initializeAuth: InitializationTask = {
+  id: 'auth',
+  retry: 3,
+  run: async () => {
+    await restoreSession();
+  },
+};
+
+function App() {
+  return (
+    <Initializer tasks={[initializeConfig, initializeAuth]}>
+      <Dashboard />
+    </Initializer>
+  );
+}
+
+function Dashboard() {
+  const { retry } = useInitializer();
+  return <button onClick={retry}>Reload app</button>;
+}
+```
+
+`<Initializer>` withholds `children` until every task has settled: it renders a splash
+screen while tasks run, and an error screen if a critical one fails. Both are plain,
+overridable defaults — pass your own `splashScreen`/`errorScreen` components, as the demo
+above does, to replace them.
+
+- [Concepts](/initializer/concepts) — the dependency graph model, critical vs
+  non-critical failures, retry/timeout, `condition`, shared `state`, and the rendering
+  contract.
+- [API reference](/initializer/api-reference) — `InitializationTask`, `parallel()`,
+  `<Initializer>` props, `useInitializer()`, and the framework-independent
+  `createInitializer()`.
+- [Testing](/initializer/testing) — how to test components that call `useInitializer()`,
+  and the task runner in isolation.

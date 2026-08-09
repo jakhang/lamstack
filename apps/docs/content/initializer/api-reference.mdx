@@ -1,0 +1,189 @@
+# API Reference
+
+## `InitializationTask`
+
+A single task in the graph.
+
+```ts
+interface InitializationTask {
+  id: string;
+  dependsOn?: string[];
+  critical?: boolean; // default true
+  retry?: number; // total attempts, default 1
+  timeout?: number; // ms, per attempt
+  condition?: (context: InitializationContext) => boolean | Promise<boolean>;
+  run(context: InitializationContext): Promise<void>;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | `string` | Uniquely identifies the task — used for `dependsOn`, `state`, and error reporting. |
+| `dependsOn` | `string[]` | Extra dependency ids, unioned with whatever position/`parallel()` already implies. See [Concepts](/initializer/concepts#the-dependency-graph). |
+| `critical` | `boolean` | Defaults to `true`. `false` lets the task fail without halting the run. |
+| `retry` | `number` | Total attempts (default `1`, no retry), run back to back with no delay. |
+| `timeout` | `number` | Max ms per attempt before it's treated as a failure (`InitializerTimeoutError`). |
+| `condition` | `(context) => boolean \| Promise<boolean>` | Returning `false` skips the task (and cascades to its dependents). A throw is treated as a failure. |
+| `run` | `(context) => Promise<void>` | The task's work. |
+
+## `InitializationContext`
+
+Passed to every `run`/`condition` call.
+
+```ts
+interface InitializationContext {
+  signal: AbortSignal;
+  state: InitializationState;
+}
+```
+
+## `InitializationState`
+
+The shared key/value bag at `context.state`, one instance per run.
+
+```ts
+interface InitializationState {
+  get<T = unknown>(key: string): T | undefined;
+  set<T = unknown>(key: string, value: T): void;
+  has(key: string): boolean;
+}
+```
+
+## `parallel()`
+
+```ts
+function parallel(tasks: InitializationTask[]): ParallelGroup;
+```
+
+Wraps tasks so they run concurrently against the same set of dependencies. Use only for
+tasks that are independent of each other — the initializer waits for the whole group to
+settle before continuing. See [Concepts](/initializer/concepts#the-dependency-graph).
+
+## `<Initializer>`
+
+```tsx
+import { Initializer } from '@omnireact/initializer';
+
+<Initializer
+  tasks={tasks}
+  splashScreen={MySplashScreen}
+  errorScreen={MyErrorScreen}
+  onTaskStart={(task) => logger.info(`Starting ${task.id}`)}
+  onTaskFailed={(task, error) => logger.error(task.id, error)}
+>
+  <App />
+</Initializer>;
+```
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `tasks` | `TaskEntry[]` | Required. `InitializationTask`s and/or `parallel([...])` groups. Only read at the moment a run (re)starts — mount, or after `retry()`. |
+| `splashScreen` | `ComponentType<SplashScreenProps>` | Shown while any task is pending/running. Defaults to a plain built-in screen. |
+| `errorScreen` | `ComponentType<ErrorScreenProps>` | Shown when a critical task fails. Defaults to a plain built-in screen with a "Retry" button. |
+| `children` | `ReactNode` | Rendered once every task has settled successfully (`status === 'completed'`). |
+| `onTaskStart` | `(task) => void` | Fires when a task begins running (after its `condition` check passes). |
+| `onTaskComplete` | `(task) => void` | Fires when a task succeeds. |
+| `onTaskFailed` | `(task, error) => void` | Fires when a task's final attempt fails (after retries are exhausted). |
+| `onComplete` | `() => void` | Fires once, when every task has settled with no critical failure. |
+| `onError` | `(error: InitializationError) => void` | Fires once, with the first critical failure that halted the run. |
+| `onAbort` | `() => void` | Fires when `abort()` is called manually (not from a critical failure). |
+
+### `SplashScreenProps`
+
+```ts
+interface SplashScreenProps {
+  progress: number; // 0-100
+  tasks: TaskSnapshot[];
+}
+```
+
+### `ErrorScreenProps`
+
+```ts
+interface ErrorScreenProps {
+  error: InitializationError;
+  retry: () => void;
+}
+```
+
+## `useInitializer()`
+
+Must be called from a component rendered under `<Initializer>` — since `children` only
+mounts once `status === 'completed'`, this is typically used to trigger a later reload
+rather than to read state during the loading phase (the splash/error screens get what
+they need as props instead).
+
+```ts
+const { status, progress, tasks, error, retry, abort } = useInitializer();
+```
+
+| Member | Type | Description |
+| --- | --- | --- |
+| `status` | `InitializationStatus` | `'idle' \| 'running' \| 'completed' \| 'failed' \| 'cancelled'`. |
+| `progress` | `number` | Percentage of tasks that have settled (0-100). |
+| `tasks` | `TaskSnapshot[]` | Per-task `{ id, status }`, in declaration order. |
+| `error` | `InitializationError \| null` | The critical failure that halted the run, if any. |
+| `retry` | `() => void` | Restarts the whole sequence from the beginning (a fresh graph, fresh `state`, fresh `AbortController`). |
+| `abort` | `() => void` | Aborts the sequence in progress. |
+
+## `createInitializer()`
+
+The framework-independent core, used by `<Initializer>` internally and usable directly
+outside of React.
+
+```ts
+import { createInitializer } from '@omnireact/initializer';
+
+const initializer = createInitializer({ tasks, onError: reportToSentry });
+
+const unsubscribe = initializer.subscribe(() => {
+  console.log(initializer.getSnapshot());
+});
+
+await initializer.run();
+// later:
+initializer.abort();
+unsubscribe();
+```
+
+| Member | Signature | Description |
+| --- | --- | --- |
+| `run` | `() => Promise<void>` | Starts the sequence. Building the graph happens synchronously inside `createInitializer()` itself — a malformed graph throws immediately, before `run()` is ever called. Calling `run()` more than once is a no-op. |
+| `abort` | `() => void` | Aborts the sequence in progress. |
+| `getSnapshot` | `() => RunnerSnapshot` | The current `{ status, progress, tasks, error }`. |
+| `subscribe` | `(listener: () => void) => () => void` | Registers a listener called on every snapshot change; returns an unsubscribe function. |
+
+## Other types
+
+```ts
+type InitializationStatus = 'idle' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+type InitializationTaskStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled';
+
+interface TaskSnapshot {
+  id: string;
+  status: InitializationTaskStatus;
+}
+
+interface InitializationError {
+  taskId: string;
+  error: unknown;
+}
+
+interface RunnerSnapshot {
+  status: InitializationStatus;
+  progress: number;
+  tasks: TaskSnapshot[];
+  error: InitializationError | null;
+}
+```
+
+`InitializerTimeoutError` (extends `Error`) is thrown internally when a task exceeds its
+`timeout` — check `error.error instanceof InitializerTimeoutError` in `onTaskFailed`/
+`onError` to distinguish a timeout from any other failure.

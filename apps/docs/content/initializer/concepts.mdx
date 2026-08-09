@@ -1,0 +1,127 @@
+# Concepts
+
+## The dependency graph
+
+`tasks` isn't just a list run top to bottom — it's flattened into a dependency graph,
+built from two mechanisms that get unioned together:
+
+- **Position.** Scanning the array in order, each entry depends on whatever came
+  immediately before it. A plain task becomes a one-task "barrier" for what follows;
+  a `parallel([...])` group's tasks all depend on that same prior barrier (so they run
+  concurrently with each other, not sequentially) and, together, become the barrier for
+  whatever comes next — the initializer waits for the whole group before moving on.
+- **`dependsOn`.** Explicit extra dependencies, for edges position alone can't express —
+  e.g. two tasks inside the same `parallel([...])` batch where one still needs to wait
+  for the other, or a later task depending on a non-adjacent earlier one.
+
+```tsx
+tasks={[
+  initializeAuth,
+  parallel([initializeConfig, initializeDictionary, initializeTheme]),
+]}
+```
+
+runs as:
+
+```text
+              ┌─ config ─────┐
+auth ─────────┼─ dictionary ─┼──→ (settled)
+              └─ theme ──────┘
+```
+
+A malformed graph — a cycle, a `dependsOn` referencing an unknown task id, or a duplicate
+task id — throws synchronously when the graph is built (at `<Initializer>` mount, or at
+`createInitializer()` if you're using the core API directly), not partway through a run.
+
+## Critical vs non-critical failures
+
+`critical` defaults to `true` — tasks are assumed required. A critical failure aborts the
+whole run immediately: the shared `AbortSignal` trips, no further tasks are scheduled,
+and `<Initializer>` shows the error screen. Set `critical: false` for optional work
+(analytics, prefetching, telemetry) — a failure there is recorded (`onTaskFailed` still
+fires, the task's own status becomes `'failed'`) but doesn't stop the app from starting.
+
+## Cascade skipping
+
+A task whose dependency didn't `complete` — because it failed, was itself skipped, or
+was cancelled — is **skipped**, not run. This applies whether the dependency was critical
+or not: a non-critical failure still means "the thing I depend on didn't finish," so
+running the dependent task anyway would likely be working with missing/stale `state`.
+
+An independent task (no dependency relationship to whatever failed or was aborted) that
+simply hadn't started yet when the whole run was aborted ends up **cancelled** instead —
+a different status, because there's no dependency to point to as the reason.
+
+## Retry and timeout
+
+`retry: number` is the total number of attempts (default `1`, i.e. no retry) — attempts
+run back to back immediately, with no delay between them. `timeout: number` (ms) applies
+**per attempt**: if a single attempt doesn't resolve within the window, it's treated as a
+failure (an `InitializerTimeoutError`) and, if attempts remain, retried.
+
+```ts
+{
+  id: 'config',
+  retry: 3,
+  timeout: 5000,
+  run: () => fetchConfig(), // each of the 3 attempts gets its own 5s window
+}
+```
+
+## `condition`
+
+An optional async predicate deciding whether to run a task at all:
+
+```ts
+{
+  id: 'admin',
+  condition: ({ state }) => state.get<User>('user')?.role === 'admin',
+  run: () => loadAdminData(),
+}
+```
+
+Returning `false` skips the task (and cascades to anything that `dependsOn` it). A
+throwing/rejecting `condition` is treated exactly like a failed `run()` — it respects
+`critical` the same way.
+
+## Shared `state`
+
+Every task's `run`/`condition` receives `{ signal, state }`. `state` is a plain
+key/value bag, one instance per run, for passing data between tasks without reaching for
+module-level variables:
+
+```ts
+const initializeUser = {
+  id: 'user',
+  run: async ({ state }) => {
+    state.set('user', await fetchCurrentUser());
+  },
+};
+
+const initializePermissions = {
+  id: 'permissions',
+  dependsOn: ['user'],
+  run: async ({ state }) => {
+    await loadPermissions(state.get('user'));
+  },
+};
+```
+
+## The rendering contract
+
+`<Initializer>` withholds `children` until `status === 'completed'` — it shows
+`splashScreen` while running, or `errorScreen` on a critical failure, instead. This
+means `useInitializer()` is only reachable from `children` once startup has already
+succeeded; its main use there is triggering a later `retry()` (e.g. a "reload app"
+button), not reading state during the loading phase itself — the splash/error screens
+receive what they need directly as props (`progress`/`tasks`, and `error`/`retry`
+respectively).
+
+## Framework-independent core
+
+The scheduler (`buildGraph`/`executeGraph`, wrapped by `createInitializer`) has no React
+import at all. `<Initializer>` is a thin adapter: it creates a `createInitializer()`
+handle in an effect, subscribes to it with `useSyncExternalStore`, and recreates the
+handle (a fresh graph, fresh `state`, fresh `AbortController`) each time `retry()` is
+called. See [API reference](/initializer/api-reference#createinitializer) for using the
+core runner outside of React entirely.

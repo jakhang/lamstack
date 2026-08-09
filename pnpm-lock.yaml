@@ -86,6 +86,9 @@ importers:
       '@omnireact/dialog':
         specifier: workspace:*
         version: link:../../packages/dialog
+      '@omnireact/initializer':
+        specifier: workspace:*
+        version: link:../../packages/initializer
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -157,6 +160,15 @@ importers:
       '@types/invariant':
         specifier: ^2.2.37
         version: 2.2.37
+
+  packages/initializer:
+    dependencies:
+      '@omnireact/core':
+        specifier: workspace:*
+        version: link:../core
+      react:
+        specifier: '>=18'
+        version: 19.2.8
 
 packages:
 

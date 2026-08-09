@@ -9,3 +9,4 @@ dist
 .claude/*
 coverage
 **/public/_pagefind
+tasks/*

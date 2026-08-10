@@ -25,10 +25,11 @@ More packages (data, ...) are planned.
 
 ## Credits
 
-`@omnireact/dialog`'s API is a headless extraction of
+`@omnireact/dialog` is a headless extraction and adaptation of
 [MUI Toolpad Core's `useDialogs`](https://mui.com/toolpad/core/react-use-dialogs/) — same
 shape and semantics, ported out from under MUI so it has no MUI dependency. All credit for
-the original design goes to the Toolpad team.
+the original design goes to the Toolpad team — see
+[`packages/dialog/NOTICE`](./packages/dialog/NOTICE) for the required MIT attribution.
 
 ## Development
 

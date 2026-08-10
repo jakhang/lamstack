@@ -54,11 +54,13 @@ Full docs, live demos (Tailwind CSS / MUI / shadcn-ui), and API reference:
 
 ## Credits
 
-This API is a headless extraction of
-[MUI Toolpad Core's `useDialogs`](https://mui.com/toolpad/core/react-use-dialogs/) — same
-`open`/`close`/`alert`/`confirm`/`prompt` shape and `onClose` semantics, ported out from
-under MUI so it has no MUI dependency. All credit for the original design goes to the
-Toolpad team.
+This is a headless extraction and adaptation of
+[MUI Toolpad Core's `useDialogs`](https://mui.com/toolpad/core/react-use-dialogs/) —
+same `open`/`close`/`alert`/`confirm`/`prompt` shape and `onClose` semantics, and the
+dialog stack management in `dialog.provider.tsx` is derived from Toolpad Core's
+`DialogsProvider`, ported out from under MUI so this package has no MUI dependency. All
+credit for the original design goes to the Toolpad team — see [`NOTICE`](./NOTICE) for
+the required MIT attribution.
 
 ## License
 

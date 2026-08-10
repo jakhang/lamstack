@@ -79,4 +79,7 @@ app's client-side layout, not directly inside a Server Component.
 
 The API is intentionally close to [`@toolpad/core`'s `useDialogs`](https://mui.com/toolpad/core/react-use-dialogs/)
 — if you've used that, this should feel familiar. `@omnireact/dialog` is a standalone,
-headless extraction of the same pattern with no MUI dependency.
+headless extraction of the same pattern with no MUI dependency; the dialog stack
+management is substantially derived from Toolpad Core's `DialogsProvider`, so the package
+ships a [`NOTICE`](https://github.com/jakhang/omnireact/blob/main/packages/dialog/NOTICE)
+file reproducing its original MIT copyright notice, as required by its license.

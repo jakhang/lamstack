@@ -1,10 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { parallel } from '@omnireact/initializer';
-import type { InitializationTask, TaskEntry, TaskSnapshot } from '@omnireact/initializer';
-import { Initializer, useInitializer } from '@omnireact/initializer/react';
-import type { ErrorScreenProps, SplashScreenProps } from '@omnireact/initializer/react';
+import { parallel } from '@lamstack/react-initializer';
+import type { InitializationTask, TaskEntry, TaskSnapshot } from '@lamstack/react-initializer';
+import { Initializer, useInitializer } from '@lamstack/react-initializer/react';
+import type { ErrorScreenProps, SplashScreenProps } from '@lamstack/react-initializer/react';
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

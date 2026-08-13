@@ -8,8 +8,8 @@ that opens/closes it.
 ```tsx
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { DialogsProvider, useDialogs } from '@omnireact/dialog';
-import type { DialogTemplates } from '@omnireact/dialog';
+import { DialogsProvider, useDialogs } from '@lamstack/react-dialog';
+import type { DialogTemplates } from '@lamstack/react-dialog';
 
 const templates: DialogTemplates = {
   alert: ({ payload, open, onClose }) =>
@@ -79,7 +79,7 @@ Only reach for `DialogsProvider` + `useDialogs()` when you're testing the _openi
 
 ## Reference
 
-`@omnireact/dialog`'s own test suite
-([`packages/dialog/src/dialog.test.tsx`](https://github.com/jakhang/omnireact/blob/main/packages/dialog/src/dialog.test.tsx))
+`@lamstack/react-dialog`'s own test suite
+([`packages/react-dialog/src/dialog.test.tsx`](https://github.com/jakhang/lamstack/blob/main/packages/react-dialog/src/dialog.test.tsx))
 uses exactly this pattern and additionally covers `onClose` timing/error semantics — worth
 reading if you need to test those edge cases in your own app.

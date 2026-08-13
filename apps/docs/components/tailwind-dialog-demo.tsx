@@ -1,14 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { DialogsProvider, useDialogs } from '@omnireact/dialog';
+import { DialogsProvider, useDialogs } from '@lamstack/react-dialog';
 import type {
   AlertDialogPayload,
   ConfirmDialogPayload,
   DialogProps,
   DialogTemplates,
   PromptDialogPayload,
-} from '@omnireact/dialog';
+} from '@lamstack/react-dialog';
 
 function DialogShell({ title, children }: { title?: React.ReactNode; children: React.ReactNode }) {
   return (

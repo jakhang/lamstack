@@ -1,7 +1,7 @@
 import { Callout, Tabs } from 'nextra/components';
 import { InitializerDemo } from '../../components/initializer-demo';
 
-# @omnireact/initializer
+# @lamstack/react-initializer
 
 A lightweight application-startup orchestrator for React. `<Initializer>` runs a sequence
 of stages — a task, or several running concurrently via `parallel([...])` — before
@@ -17,22 +17,22 @@ it.
 <Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tabs.Tab>
     ```bash
-    pnpm add @omnireact/initializer
+    pnpm add @lamstack/react-initializer
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    npm install @omnireact/initializer
+    npm install @lamstack/react-initializer
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    yarn add @omnireact/initializer
+    yarn add @lamstack/react-initializer
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    bun add @omnireact/initializer
+    bun add @lamstack/react-initializer
     ```
   </Tabs.Tab>
 </Tabs>
@@ -52,16 +52,16 @@ app you'd fall back to a default locale here).
   </Tabs.Tab>
   <Tabs.Tab>
     The complete, real source behind the preview above — nothing hidden or simplified
-    ([view on GitHub](https://github.com/jakhang/omnireact/blob/main/apps/docs/components/initializer-demo.tsx)):
+    ([view on GitHub](https://github.com/jakhang/lamstack/blob/main/apps/docs/components/initializer-demo.tsx)):
 
     ```tsx
     'use client';
 
     import * as React from 'react';
-    import { parallel } from '@omnireact/initializer';
-    import type { InitializationTask, TaskEntry, TaskSnapshot } from '@omnireact/initializer';
-    import { Initializer, useInitializer } from '@omnireact/initializer/react';
-    import type { ErrorScreenProps, SplashScreenProps } from '@omnireact/initializer/react';
+    import { parallel } from '@lamstack/react-initializer';
+    import type { InitializationTask, TaskEntry, TaskSnapshot } from '@lamstack/react-initializer';
+    import { Initializer, useInitializer } from '@lamstack/react-initializer/react';
+    import type { ErrorScreenProps, SplashScreenProps } from '@lamstack/react-initializer/react';
 
     function delay(ms: number): Promise<void> {
       return new Promise((resolve) => setTimeout(resolve, ms));
@@ -209,8 +209,8 @@ app you'd fall back to a default locale here).
 The minimal version — no custom splash/error UI, no `parallel()`, just tasks in order:
 
 ```tsx
-import { Initializer, useInitializer } from '@omnireact/initializer/react';
-import type { InitializationTask } from '@omnireact/initializer';
+import { Initializer, useInitializer } from '@lamstack/react-initializer/react';
+import type { InitializationTask } from '@lamstack/react-initializer';
 
 const initializeConfig: InitializationTask = {
   id: 'config',
@@ -256,7 +256,7 @@ above does, to replace them.
 
 ## Non-goals
 
-`@omnireact/initializer` does exactly one thing: run a sequence of async startup steps
+`@lamstack/react-initializer` does exactly one thing: run a sequence of async startup steps
 before rendering the app. It is deliberately **not**:
 
 - **A data-fetching layer.** No caching, no request deduplication, no revalidation. Fetch

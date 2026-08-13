@@ -3,7 +3,7 @@ import { TailwindDialogDemo } from '../../components/tailwind-dialog-demo';
 
 # Tailwind CSS
 
-`@omnireact/dialog` doesn't render anything itself, so styling the `alert`/`confirm`/
+`@lamstack/react-dialog` doesn't render anything itself, so styling the `alert`/`confirm`/
 `prompt` templates with Tailwind utility classes is just... writing a normal React
 component with `className` props.
 
@@ -25,20 +25,20 @@ call resolved with:
   </Tabs.Tab>
   <Tabs.Tab>
     The complete, real source behind the preview above — nothing hidden or simplified
-    ([view on GitHub](https://github.com/jakhang/omnireact/blob/main/apps/docs/components/tailwind-dialog-demo.tsx)):
+    ([view on GitHub](https://github.com/jakhang/lamstack/blob/main/apps/docs/components/tailwind-dialog-demo.tsx)):
 
     ```tsx
     'use client';
 
     import * as React from 'react';
-    import { DialogsProvider, useDialogs } from '@omnireact/dialog';
+    import { DialogsProvider, useDialogs } from '@lamstack/react-dialog';
     import type {
       AlertDialogPayload,
       ConfirmDialogPayload,
       DialogProps,
       DialogTemplates,
       PromptDialogPayload,
-    } from '@omnireact/dialog';
+    } from '@lamstack/react-dialog';
 
     function DialogShell({
       title,
@@ -436,8 +436,8 @@ types, passed directly to `open()` instead of going through `templates`:
 
 ```tsx
 import * as React from 'react';
-import { useDialogs } from '@omnireact/dialog';
-import type { DialogProps } from '@omnireact/dialog';
+import { useDialogs } from '@lamstack/react-dialog';
+import type { DialogProps } from '@lamstack/react-dialog';
 
 interface ItemPayload {
   itemName: string;

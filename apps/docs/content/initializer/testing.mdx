@@ -11,7 +11,7 @@ API directly — no `render()`, no `act()`, just `await`:
 
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { createInitializer } from '@omnireact/initializer';
+import { createInitializer } from '@lamstack/react-initializer';
 
 it('retries a flaky task and eventually succeeds', async () => {
   let attempts = 0;
@@ -58,12 +58,12 @@ it('records which task caused a critical failure', async () => {
 ## Testing components that render `<Initializer>`
 
 `<Initializer>` withholds `children` until every task settles, so assertions about your
-app need `waitFor` — the same reason `@omnireact/dialog`'s async `open()` calls do.
+app need `waitFor` — the same reason `@lamstack/react-dialog`'s async `open()` calls do.
 
 ```tsx
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { Initializer } from '@omnireact/initializer/react';
+import { Initializer } from '@lamstack/react-initializer/react';
 
 it('renders the app once initialization completes', async () => {
   render(
@@ -146,10 +146,10 @@ it('retry() restarts the sequence', async () => {
 
 ## Reference
 
-`@omnireact/initializer`'s own test suite
-([`packages/initializer/src/core`](https://github.com/jakhang/omnireact/blob/main/packages/initializer/src/core)
+`@lamstack/react-initializer`'s own test suite
+([`packages/react-initializer/src/core`](https://github.com/jakhang/lamstack/blob/main/packages/react-initializer/src/core)
 and
-[`.../src/react/Initializer.test.tsx`](https://github.com/jakhang/omnireact/blob/main/packages/initializer/src/react/Initializer.test.tsx))
+[`.../src/react/Initializer.test.tsx`](https://github.com/jakhang/lamstack/blob/main/packages/react-initializer/src/react/Initializer.test.tsx))
 covers the full matrix — stage ordering, `parallel()` concurrency (and `concurrency`
 caps), retry/`retryDelay`, timeout, critical/non-critical failures, `condition`, and
 cancellation — worth reading if you need to test any of those edge cases in your own app.

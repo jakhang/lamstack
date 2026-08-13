@@ -1,6 +1,6 @@
 import { Tabs } from 'nextra/components';
 
-# @omnireact/dialog
+# @lamstack/react-dialog
 
 Headless, imperative dialog API for React. Wrap your app in `DialogsProvider`, supply the
 components used to render `alert`/`confirm`/`prompt`, then open dialogs from anywhere with
@@ -9,22 +9,22 @@ components used to render `alert`/`confirm`/`prompt`, then open dialogs from any
 <Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tabs.Tab>
     ```bash
-    pnpm add @omnireact/dialog
+    pnpm add @lamstack/react-dialog
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    npm install @omnireact/dialog
+    npm install @lamstack/react-dialog
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    yarn add @omnireact/dialog
+    yarn add @lamstack/react-dialog
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    bun add @omnireact/dialog
+    bun add @lamstack/react-dialog
     ```
   </Tabs.Tab>
 </Tabs>
@@ -42,8 +42,8 @@ components used to render `alert`/`confirm`/`prompt`, then open dialogs from any
 ## Quickstart
 
 ```tsx
-import { DialogsProvider, useDialogs } from '@omnireact/dialog';
-import type { DialogTemplates } from '@omnireact/dialog';
+import { DialogsProvider, useDialogs } from '@lamstack/react-dialog';
+import type { DialogTemplates } from '@lamstack/react-dialog';
 
 const templates: DialogTemplates = {
   alert: MyAlertDialog,

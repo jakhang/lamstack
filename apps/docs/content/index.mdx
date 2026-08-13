@@ -1,38 +1,38 @@
 import { Tabs } from 'nextra/components';
 
-# omnireact
+# lamstack
 
 A collection of independent, headless React packages. MIT licensed. Each package installs
-on its own and only depends on `@omnireact/core` — never on a sibling feature package.
+on its own and only depends on `@lamstack/react-core` — never on a sibling feature package.
 
 <Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tabs.Tab>
     ```bash
-    pnpm add @omnireact/dialog
+    pnpm add @lamstack/react-dialog
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    npm install @omnireact/dialog
+    npm install @lamstack/react-dialog
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    yarn add @omnireact/dialog
+    yarn add @lamstack/react-dialog
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash
-    bun add @omnireact/dialog
+    bun add @lamstack/react-dialog
     ```
   </Tabs.Tab>
 </Tabs>
 
 ## Packages
 
-- [`@omnireact/dialog`](/dialog) — headless, imperative dialog API
+- [`@lamstack/react-dialog`](/dialog) — headless, imperative dialog API
   (`useDialogs()` → `open`/`close`/`alert`/`confirm`/`prompt`).
-- [`@omnireact/initializer`](/initializer) — headless app-startup orchestrator
+- [`@lamstack/react-initializer`](/initializer) — headless app-startup orchestrator
   (`<Initializer>` runs a dependency graph of async tasks, with retry, timeout, and
   critical/non-critical failure handling).
 

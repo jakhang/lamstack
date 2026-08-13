@@ -6,8 +6,8 @@ Renders the currently-open dialog stack and provides the imperative API consumed
 `useDialogs()`. Mount it once, near the root of your app.
 
 ```tsx
-import { DialogsProvider } from '@omnireact/dialog';
-import type { DialogTemplates } from '@omnireact/dialog';
+import { DialogsProvider } from '@lamstack/react-dialog';
+import type { DialogTemplates } from '@lamstack/react-dialog';
 
 const templates: DialogTemplates = {
   alert: MyAlertDialog,
@@ -64,7 +64,7 @@ Any component matching `DialogComponent<P, R>` can be opened with `open()` — i
 limited to the three built-in templates.
 
 ```tsx
-import type { DialogProps } from '@omnireact/dialog';
+import type { DialogProps } from '@lamstack/react-dialog';
 
 interface ConfirmDeletePayload {
   itemName: string;

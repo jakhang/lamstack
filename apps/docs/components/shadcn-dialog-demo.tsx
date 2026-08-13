@@ -2,14 +2,14 @@
 
 import * as React from 'react';
 import { Loader2, Star } from 'lucide-react';
-import { DialogsProvider, useDialogs } from '@omnireact/dialog';
+import { DialogsProvider, useDialogs } from '@lamstack/react-dialog';
 import type {
   AlertDialogPayload,
   ConfirmDialogPayload,
   DialogProps,
   DialogTemplates,
   PromptDialogPayload,
-} from '@omnireact/dialog';
+} from '@lamstack/react-dialog';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardTitle } from './ui/card';
 import {

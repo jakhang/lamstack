@@ -14,14 +14,14 @@ const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata = {
   title: {
-    template: '%s – omnireact',
-    default: 'omnireact',
+    template: '%s – lamstack',
+    default: 'lamstack',
   },
-  description: 'omnireact — a collection of independent, headless React packages.',
+  description: 'lamstack — a collection of independent, headless React packages.',
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const navbar = <Navbar logo={<b>Omnireact</b>} />;
+  const navbar = <Navbar logo={<b>lamstack</b>} />;
   const pageMap = await getPageMap();
 
   return (
@@ -32,7 +32,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <ThemeProvider theme={muiTheme}>
             <Layout
               navbar={navbar}
-              docsRepositoryBase="https://github.com/jakhang/omnireact/tree/main/apps/docs"
+              docsRepositoryBase="https://github.com/jakhang/lamstack/tree/main/apps/docs"
               pageMap={pageMap}
               toc={{ backToTop: false }}
             >

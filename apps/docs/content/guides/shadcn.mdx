@@ -3,7 +3,7 @@ import { ShadcnDialogDemo } from '../../components/shadcn-dialog-demo';
 
 # shadcn/ui
 
-Wire `@omnireact/dialog`'s templates to shadcn/ui's `Dialog` (a styled wrapper around
+Wire `@lamstack/react-dialog`'s templates to shadcn/ui's `Dialog` (a styled wrapper around
 Radix UI's dialog primitive). The component below was generated with the real `shadcn`
 CLI (`npx shadcn@latest add dialog`) — its exact markup/class names come from the
 registry, not hand-written from memory.
@@ -26,21 +26,21 @@ with:
   </Tabs.Tab>
   <Tabs.Tab>
     The complete, real source behind the preview above — nothing hidden or simplified
-    ([view on GitHub](https://github.com/jakhang/omnireact/blob/main/apps/docs/components/shadcn-dialog-demo.tsx)):
+    ([view on GitHub](https://github.com/jakhang/lamstack/blob/main/apps/docs/components/shadcn-dialog-demo.tsx)):
 
     ```tsx
     'use client';
 
     import * as React from 'react';
     import { Loader2, Star } from 'lucide-react';
-    import { DialogsProvider, useDialogs } from '@omnireact/dialog';
+    import { DialogsProvider, useDialogs } from '@lamstack/react-dialog';
     import type {
       AlertDialogPayload,
       ConfirmDialogPayload,
       DialogProps,
       DialogTemplates,
       PromptDialogPayload,
-    } from '@omnireact/dialog';
+    } from '@lamstack/react-dialog';
     import { Button } from './ui/button';
     import { Card, CardContent, CardDescription, CardFooter, CardTitle } from './ui/card';
     import {
@@ -401,8 +401,8 @@ component with its own payload/result types instead of one of the three built-in
 ```tsx
 import * as React from 'react';
 import { Star } from 'lucide-react';
-import { useDialogs } from '@omnireact/dialog';
-import type { DialogProps } from '@omnireact/dialog';
+import { useDialogs } from '@lamstack/react-dialog';
+import type { DialogProps } from '@lamstack/react-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,

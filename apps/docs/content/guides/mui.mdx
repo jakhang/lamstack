@@ -3,7 +3,7 @@ import { MuiDialogDemo } from '../../components/mui-dialog-demo';
 
 # Material UI (MUI)
 
-Wire `@omnireact/dialog`'s templates to MUI's own `Dialog`/`DialogTitle`/`DialogContent`/
+Wire `@lamstack/react-dialog`'s templates to MUI's own `Dialog`/`DialogTitle`/`DialogContent`/
 `DialogActions` components — `DialogsProvider` and `useDialogs()` don't know or care that
 MUI is involved.
 
@@ -25,7 +25,7 @@ with:
   </Tabs.Tab>
   <Tabs.Tab>
     The complete, real source behind the preview above — nothing hidden or simplified
-    ([view on GitHub](https://github.com/jakhang/omnireact/blob/main/apps/docs/components/mui-dialog-demo.tsx)):
+    ([view on GitHub](https://github.com/jakhang/lamstack/blob/main/apps/docs/components/mui-dialog-demo.tsx)):
 
     ```tsx
     'use client';
@@ -46,14 +46,14 @@ with:
     import TextField from '@mui/material/TextField';
     import Typography from '@mui/material/Typography';
     import Stack from '@mui/material/Stack';
-    import { DialogsProvider, useDialogs } from '@omnireact/dialog';
+    import { DialogsProvider, useDialogs } from '@lamstack/react-dialog';
     import type {
       AlertDialogPayload,
       ConfirmDialogPayload,
       DialogProps,
       DialogTemplates,
       PromptDialogPayload,
-    } from '@omnireact/dialog';
+    } from '@lamstack/react-dialog';
 
     function AlertDialog({ payload, open, onClose }: DialogProps<AlertDialogPayload, void>) {
       return (
@@ -384,7 +384,7 @@ with:
 </Tabs>
 
 Note MUI's `<Dialog onClose>` prop has a different signature than
-`@omnireact/dialog`'s `DialogProps.onClose` (`(event, reason) => void` vs. `(result: R) =>
+`@lamstack/react-dialog`'s `DialogProps.onClose` (`(event, reason) => void` vs. `(result: R) =>
 Promise<void>`) — map it explicitly (`onClose={() => onClose(false)}`) rather than passing
 `onClose` straight through, so backdrop-click/Escape resolve with a sensible result too.
 
@@ -402,8 +402,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Rating from '@mui/material/Rating';
 import Button from '@mui/material/Button';
-import { useDialogs } from '@omnireact/dialog';
-import type { DialogProps } from '@omnireact/dialog';
+import { useDialogs } from '@lamstack/react-dialog';
+import type { DialogProps } from '@lamstack/react-dialog';
 
 interface ItemPayload {
   itemName: string;

@@ -61,7 +61,7 @@ promise rejection.
 
 ## Headless by design
 
-None of `@omnireact/dialog`'s own code renders any markup. `DialogsProvider` only manages
+None of `@lamstack/react-dialog`'s own code renders any markup. `DialogsProvider` only manages
 state and timing; the actual `<div>`s, buttons, and styling come entirely from the
 `templates` you pass in (for `alert`/`confirm`/`prompt`) or the components you pass to
 `open()` directly (for anything custom). This means the package has zero opinion on — and
@@ -78,8 +78,8 @@ app's client-side layout, not directly inside a Server Component.
 ## Prior art
 
 The API is intentionally close to [`@toolpad/core`'s `useDialogs`](https://mui.com/toolpad/core/react-use-dialogs/)
-— if you've used that, this should feel familiar. `@omnireact/dialog` is a standalone,
+— if you've used that, this should feel familiar. `@lamstack/react-dialog` is a standalone,
 headless extraction of the same pattern with no MUI dependency; the dialog stack
 management is substantially derived from Toolpad Core's `DialogsProvider`, so the package
-ships a [`NOTICE`](https://github.com/jakhang/omnireact/blob/main/packages/dialog/NOTICE)
+ships a [`NOTICE`](https://github.com/jakhang/lamstack/blob/main/packages/react-dialog/NOTICE)
 file reproducing its original MIT copyright notice, as required by its license.

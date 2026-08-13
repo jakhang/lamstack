@@ -16,14 +16,14 @@ import Rating from '@mui/material/Rating';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
-import { DialogsProvider, useDialogs } from '@omnireact/dialog';
+import { DialogsProvider, useDialogs } from '@lamstack/react-dialog';
 import type {
   AlertDialogPayload,
   ConfirmDialogPayload,
   DialogProps,
   DialogTemplates,
   PromptDialogPayload,
-} from '@omnireact/dialog';
+} from '@lamstack/react-dialog';
 
 function AlertDialog({ payload, open, onClose }: DialogProps<AlertDialogPayload, void>) {
   return (

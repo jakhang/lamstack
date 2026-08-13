@@ -102,7 +102,7 @@ export class HttpClient {
    * A new, independent `HttpClient` inheriting the parent's options and the
    * plugins registered so far — a snapshot, not a live link. Registering a
    * plugin on either client afterward does not affect the other. Typically
-   * called early (before `use(authPlugin(...))`/`use(refreshPlugin(...))`) to
+   * called early (before `use(auth(...))`/`use(refresh(...))`) to
    * produce a `refreshClient` with no auth/refresh plugins attached, avoiding
    * a recursive refresh loop.
    */

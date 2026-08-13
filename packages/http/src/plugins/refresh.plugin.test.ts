@@ -43,7 +43,7 @@ function scriptedAdapter(script: Array<'unauthorized' | Record<string, unknown>>
   return { adapter, calls };
 }
 
-describe('refreshPlugin — single refresh-and-retry', () => {
+describe('refresh — single refresh-and-retry', () => {
   it('refreshes once on 401 and retries the original request, resolving with the retried response', async () => {
     const main = scriptedAdapter(['unauthorized', { ok: true }]);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
@@ -67,19 +67,19 @@ describe('refreshPlugin — single refresh-and-retry', () => {
     expect(onTokenRefreshed).toHaveBeenCalledWith({});
   });
 
-  it("re-enters only the inner chain on retry: the auth middleware runs twice, refreshPlugin's own handler runs once", async () => {
+  it("re-enters only the inner chain on retry: the auth middleware runs twice, refresh's own handler runs once", async () => {
     const main = scriptedAdapter(['unauthorized', { ok: true }]);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
 
-    let refreshPluginInvocations = 0;
+    let refreshInvocations = 0;
     let authRuns = 0;
     const client = new HttpClient({ adapter: main.adapter });
     client.use({
       name: 'count-refresh-plugin-invocations',
       order: PluginOrder.refresh - 1,
       handler: async (request, next) => {
-        refreshPluginInvocations += 1;
+        refreshInvocations += 1;
         return next(request);
       },
     });
@@ -96,7 +96,7 @@ describe('refreshPlugin — single refresh-and-retry', () => {
 
     await client.get('/x');
 
-    expect(refreshPluginInvocations).toBe(1);
+    expect(refreshInvocations).toBe(1);
     expect(authRuns).toBe(2);
   });
 
@@ -245,7 +245,7 @@ function mutableProvider(initialToken: string): TokenProvider & { token: string 
   };
 }
 
-describe('refreshPlugin — concurrent request queueing', () => {
+describe('refresh — concurrent request queueing', () => {
   it('queues concurrent 401s behind a single in-flight refresh; all resolve once it completes', async () => {
     let validToken = 'fresh-token';
     const { adapter: mainAdapter, calls: mainCalls } = tokenAwareAdapter(() => validToken);

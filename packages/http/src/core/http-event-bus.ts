@@ -12,7 +12,7 @@ type Listener<K extends keyof HttpEventMap> = (payload: HttpEventMap[K]) => void
  * Typed pub/sub for session-level events — deliberately separate from the
  * request/response pipeline, since these describe the auth *session*, not
  * any single request. Not a singleton: create one and pass it to
- * `refreshPlugin({ events })`, then subscribe via `events.on(...)`.
+ * `refresh({ events })`, then subscribe via `events.on(...)`.
  */
 export class HttpEventBus {
   private listeners: Partial<{ [K in keyof HttpEventMap]: Set<Listener<K>> }> = {};

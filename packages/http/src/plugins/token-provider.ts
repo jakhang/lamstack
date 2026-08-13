@@ -4,7 +4,7 @@ import type { HttpRequest, HttpRequestInit } from '../core/types';
 export type Awaitable<T> = T | Promise<T>;
 
 /**
- * Contract for a token storage/refresh strategy. `authPlugin`/`refreshPlugin`
+ * Contract for a token storage/refresh strategy. `auth`/`refresh`
  * are built entirely on this interface — a consumer's own implementation has
  * exactly the same capabilities as the two shipped strategies
  * (`LocalStorageTokenProvider`, `CookieHttpOnlyTokenProvider`, Task 7).
@@ -31,7 +31,7 @@ export interface RefreshPolicyContext {
   attempt: number;
 }
 
-/** Decides whether `refreshPlugin` should attempt a refresh for a given failure. */
+/** Decides whether `refresh` should attempt a refresh for a given failure. */
 export type RefreshPolicy = (context: RefreshPolicyContext) => Awaitable<boolean>;
 
 export interface DefaultRefreshPolicyOptions {

@@ -11,8 +11,8 @@ export interface RefreshPluginOptions {
   tokenProvider: TokenProvider;
   /**
    * A client with no auth/refresh plugins attached, used to call the refresh
-   * endpoint — typically `mainClient.extend({})` called *before* `use(authPlugin(...))`/
-   * `use(refreshPlugin(...))` are added to the main client, so it inherits
+   * endpoint — typically `mainClient.extend({})` called *before* `use(auth(...))`/
+   * `use(refresh(...))` are added to the main client, so it inherits
    * nothing that would recurse.
    */
   refreshClient: HttpClient;

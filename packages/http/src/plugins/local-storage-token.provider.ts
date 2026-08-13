@@ -41,7 +41,7 @@ export class LocalStorageTokenProvider implements TokenProvider {
 
   /**
    * Saves the access token (via the configured parser) and, if present, the
-   * refresh token. Called both by `refreshPlugin` internally and explicitly
+   * refresh token. Called both by `refresh` internally and explicitly
    * by feature code after sign-in/MFA verification.
    */
   async saveTokens(payload: unknown): Promise<void> {

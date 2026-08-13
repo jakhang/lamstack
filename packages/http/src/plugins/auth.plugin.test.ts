@@ -31,7 +31,7 @@ function headersOf(init: RequestInit): Record<string, string> {
   return init.headers as Record<string, string>;
 }
 
-describe('authPlugin', () => {
+describe('auth', () => {
   it('attaches Authorization: Bearer <token> when the provider resolves a token', async () => {
     const { calls, fetchStub } = captureFetch();
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });

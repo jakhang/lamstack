@@ -10,7 +10,7 @@ import type { HttpPlugin } from '../core/types';
  * `refreshPlugin` still inspects the raw `HttpError`; only errors that
  * survive a refresh retry ever reach the mapper.
  */
-export function errorMapperPlugin(map: (error: HttpError) => HttpError | Error): HttpPlugin {
+export function errorMapper(map: (error: HttpError) => HttpError | Error): HttpPlugin {
   return {
     name: 'error-mapper',
     order: PluginOrder.normalize,

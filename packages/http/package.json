@@ -1,6 +1,6 @@
 {
   "name": "@lamstack/http-client",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Framework-agnostic HTTP client core with a pluggable middleware pipeline — no hard dependency on axios or fetch.",
   "keywords": [
     "http",
@@ -37,6 +37,26 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./adapters/fetch": {
+      "import": {
+        "types": "./dist/adapters/fetch.d.ts",
+        "default": "./dist/adapters/fetch.js"
+      },
+      "require": {
+        "types": "./dist/adapters/fetch.d.cts",
+        "default": "./dist/adapters/fetch.cjs"
+      }
+    },
+    "./adapters/axios": {
+      "import": {
+        "types": "./dist/adapters/axios.d.ts",
+        "default": "./dist/adapters/axios.js"
+      },
+      "require": {
+        "types": "./dist/adapters/axios.d.cts",
+        "default": "./dist/adapters/axios.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -54,6 +74,14 @@
   },
   "devDependencies": {
     "axios": "^1.7.9"
+  },
+  "peerDependencies": {
+    "axios": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "axios": {
+      "optional": true
+    }
   },
   "publishConfig": {
     "access": "public"

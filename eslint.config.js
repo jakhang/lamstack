@@ -54,4 +54,18 @@ export default defineConfig([
       'no-restricted-imports': ['error', { patterns: ['@lamstack/react-dialog', '@lamstack/react-core'] }],
     },
   },
+  {
+    // @lamstack/http-client's core/plugins/serializers must not import axios directly —
+    // only adapters/axios.adapter(.test).ts (exempted below) may.
+    files: ['packages/http/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', { paths: ['axios'] }],
+    },
+  },
+  {
+    files: ['packages/http/src/adapters/axios.adapter.ts', 'packages/http/src/adapters/axios.adapter.test.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
+    },
+  },
 ]);

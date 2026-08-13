@@ -510,3 +510,67 @@ describe('runStages — lifecycle events', () => {
     expect(onTaskFailed).toHaveBeenCalledWith(t, error);
   });
 });
+
+describe('runStages — per-task callbacks', () => {
+  it('fires onStart/onSuccess for a successful task, with the run context', async () => {
+    const onStart = vi.fn();
+    const onSuccess = vi.fn();
+    const t = task('a', { onStart, onSuccess });
+    await run([t]);
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it('does not fire onSuccess/onError for a task skipped via condition', async () => {
+    const onStart = vi.fn();
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+    const t = task('a', { condition: async () => false, onStart, onSuccess, onError });
+    await run([t]);
+    expect(onStart).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('fires onError (not onSuccess) with the thrown error once retries are exhausted', async () => {
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+    const error = new Error('boom');
+    const t = task('a', {
+      onSuccess,
+      onError,
+      run: async () => {
+        throw error;
+      },
+    });
+    await run([t]);
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(error, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it('fires onError when a throwing condition fails the task, without ever calling onStart', async () => {
+    const onStart = vi.fn();
+    const onError = vi.fn();
+    const conditionError = new Error('condition exploded');
+    const t = task('a', {
+      onStart,
+      onError,
+      condition: async () => {
+        throw conditionError;
+      },
+    });
+    await run([t]);
+    expect(onStart).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(conditionError, expect.anything());
+  });
+
+  it('fires per-task callbacks alongside the run-wide events, both scoped to their own task', async () => {
+    const order: string[] = [];
+    const a = task('a', { onSuccess: () => order.push('a-onSuccess') });
+    const b = task('b', { onSuccess: () => order.push('b-onSuccess') });
+    await run([a, b], {
+      onTaskComplete: (t) => order.push(`${t.id}-onTaskComplete`),
+    });
+    expect(order).toEqual(['a-onSuccess', 'a-onTaskComplete', 'b-onSuccess', 'b-onTaskComplete']);
+  });
+});

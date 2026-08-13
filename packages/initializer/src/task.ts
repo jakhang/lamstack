@@ -54,6 +54,23 @@ export interface InitializationTask<S extends StateMap = StateMap> {
    * nothing just to satisfy the type.
    */
   run: (context: InitializationContext<S>) => void | Promise<void>;
+
+  /**
+   * Called right before this task's `run` starts (after `condition` passes,
+   * if any) — fires alongside the run-wide `onTaskStart` event passed to
+   * `createInitializer`, but scoped to just this task.
+   */
+  onStart?: (context: InitializationContext<S>) => void;
+
+  /** Called once this task's `run` completes successfully (after any retries). */
+  onSuccess?: (context: InitializationContext<S>) => void;
+
+  /**
+   * Called when this task ultimately fails — `run` (after exhausting
+   * `retry`) or `condition` threw/rejected. Fires alongside the run-wide
+   * `onTaskFailed` event, before a `critical` failure aborts the run.
+   */
+  onError?: (error: unknown, context: InitializationContext<S>) => void;
 }
 
 export interface ParallelOptions {

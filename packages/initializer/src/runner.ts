@@ -235,6 +235,7 @@ async function runTask<S extends StateMap>(
       shouldRun = await task.condition(context);
     } catch (conditionError) {
       updateStatus(task.id, 'failed', conditionError);
+      task.onError?.(conditionError, context);
       events.onTaskFailed?.(task, conditionError);
       if (task.critical !== false) reportCriticalFailure({ taskId: task.id, error: conditionError });
       return;
@@ -250,6 +251,7 @@ async function runTask<S extends StateMap>(
   }
 
   updateStatus(task.id, 'running');
+  task.onStart?.(context);
   events.onTaskStart?.(task);
   const startedAt = Date.now();
 
@@ -260,6 +262,7 @@ async function runTask<S extends StateMap>(
       return;
     }
     updateStatus(task.id, 'completed', undefined, Date.now() - startedAt);
+    task.onSuccess?.(context);
     events.onTaskComplete?.(task);
   } catch (error) {
     if (context.signal.aborted) {
@@ -267,6 +270,7 @@ async function runTask<S extends StateMap>(
       return;
     }
     updateStatus(task.id, 'failed', error, Date.now() - startedAt);
+    task.onError?.(error, context);
     events.onTaskFailed?.(task, error);
     if (task.critical !== false) reportCriticalFailure({ taskId: task.id, error });
   }

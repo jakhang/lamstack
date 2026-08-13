@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fetchAdapter } from '../adapters/fetch.adapter';
 import { HttpClient } from '../core/client';
-import { authPlugin } from './auth.plugin';
+import { auth } from './auth.plugin';
 import type { TokenProvider } from './token-provider';
 
 function stubProvider(overrides: Partial<TokenProvider> = {}): TokenProvider {
@@ -35,7 +35,7 @@ describe('authPlugin', () => {
   it('attaches Authorization: Bearer <token> when the provider resolves a token', async () => {
     const { calls, fetchStub } = captureFetch();
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
-    client.use(authPlugin(stubProvider({ getAccessToken: async () => 'tok123' })));
+    client.use(auth(stubProvider({ getAccessToken: async () => 'tok123' })));
 
     await client.get('/x');
 
@@ -45,7 +45,7 @@ describe('authPlugin', () => {
   it('leaves the header unset when getAccessToken() resolves null', async () => {
     const { calls, fetchStub } = captureFetch();
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
-    client.use(authPlugin(stubProvider({ getAccessToken: async () => null })));
+    client.use(auth(stubProvider({ getAccessToken: async () => null })));
 
     await client.get('/x');
 
@@ -56,7 +56,7 @@ describe('authPlugin', () => {
     const { calls, fetchStub } = captureFetch();
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
     client.use(
-      authPlugin(
+      auth(
         stubProvider({
           getAccessToken: async () => 'tok123',
           decorate: (request) => ({ ...request, headers: { ...request.headers, 'x-decorated': 'yes' } }),
@@ -75,7 +75,7 @@ describe('authPlugin', () => {
     const { calls, fetchStub } = captureFetch();
     const decorate = vi.fn((request) => request);
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
-    client.use(authPlugin(stubProvider({ getAccessToken: async () => 'tok123', decorate })));
+    client.use(auth(stubProvider({ getAccessToken: async () => 'tok123', decorate })));
 
     await client.get('/x', { meta: { auth: false } });
 
@@ -87,7 +87,7 @@ describe('authPlugin', () => {
     const { calls, fetchStub } = captureFetch();
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
     client.use(
-      authPlugin(stubProvider({ getAccessToken: async () => 'tok123' }), {
+      auth(stubProvider({ getAccessToken: async () => 'tok123' }), {
         header: 'x-api-key',
         scheme: '',
       }),

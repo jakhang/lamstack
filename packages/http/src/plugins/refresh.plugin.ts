@@ -30,10 +30,35 @@ function getAttempt(request: HttpRequest): number {
  * from the top, so outer middleware never re-runs on retry (see
  * `core/pipeline.ts`). Built entirely on the public `TokenProvider` contract;
  * holds no capability a user-authored plugin couldn't replicate.
+ *
+ * Concurrent requests that fail while a refresh is already in flight share
+ * that one attempt (`inFlightRefresh`, scoped to this plugin instance) rather
+ * than each triggering their own — but each still rejects with its own
+ * original error on failure, not a value shared across every queued request.
  */
-export function refreshPlugin(options: RefreshPluginOptions): HttpPlugin {
+export function refresh(options: RefreshPluginOptions): HttpPlugin {
   const { tokenProvider, refreshClient, maxAttempts = 1 } = options;
   const shouldRefresh = options.shouldRefresh ?? defaultRefreshPolicy();
+
+  let inFlightRefresh: Promise<void> | null = null;
+
+  function performRefresh(): Promise<void> {
+    if (!inFlightRefresh) {
+      inFlightRefresh = (async () => {
+        try {
+          const refreshInit = await tokenProvider.buildRefreshRequest();
+          const refreshResponse = await refreshClient.request(refreshInit);
+          await tokenProvider.saveTokens(refreshResponse.data);
+        } catch (refreshError) {
+          await tokenProvider.clear();
+          throw refreshError;
+        } finally {
+          inFlightRefresh = null;
+        }
+      })();
+    }
+    return inFlightRefresh;
+  }
 
   return {
     name: 'refresh',
@@ -62,11 +87,8 @@ export function refreshPlugin(options: RefreshPluginOptions): HttpPlugin {
           }
 
           try {
-            const refreshInit = await tokenProvider.buildRefreshRequest();
-            const refreshResponse = await refreshClient.request(refreshInit);
-            await tokenProvider.saveTokens(refreshResponse.data);
+            await performRefresh();
           } catch (refreshError) {
-            await tokenProvider.clear();
             throw new HttpError(error.message, {
               code: error.code,
               status: error.status,

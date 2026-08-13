@@ -15,7 +15,7 @@ export interface AuthPluginOptions {
  * user-authored plugin couldn't replicate. Skips itself when a request's
  * `meta.auth` is explicitly `false`.
  */
-export function authPlugin(provider: TokenProvider, options: AuthPluginOptions = {}): HttpPlugin {
+export function auth(provider: TokenProvider, options: AuthPluginOptions = {}): HttpPlugin {
   const header = (options.header ?? 'authorization').toLowerCase();
   const scheme = options.scheme ?? 'Bearer';
 

@@ -1,3 +1,4 @@
+import type { HttpError } from '../core/http-error';
 import type { HttpRequest, HttpRequestInit } from '../core/types';
 
 export type Awaitable<T> = T | Promise<T>;
@@ -21,4 +22,40 @@ export interface TokenProvider {
   buildRefreshRequest(): Awaitable<HttpRequestInit>;
   /** Optional: modify the outgoing request outside of Authorization handling (e.g. `credentials: 'include'` for a cookie-based strategy). */
   decorate?(request: HttpRequest): HttpRequest;
+}
+
+export interface RefreshPolicyContext {
+  error: HttpError;
+  request: HttpRequest;
+  /** How many refresh cycles this request has already gone through (0 on the first failure). */
+  attempt: number;
+}
+
+/** Decides whether `refreshPlugin` should attempt a refresh for a given failure. */
+export type RefreshPolicy = (context: RefreshPolicyContext) => Awaitable<boolean>;
+
+export interface DefaultRefreshPolicyOptions {
+  /** HTTP statuses that are candidates for a refresh. Defaults to `[401]`. */
+  statuses?: number[];
+  /**
+   * Requests whose (resolved) `url` matches one of these are never eligible
+   * for refresh — typically the login endpoint and the refresh endpoint
+   * itself, to avoid a refresh loop.
+   */
+  excludePaths?: (string | RegExp)[];
+}
+
+/** Ported from the dashboard's `DefaultTokenRefreshPolicy` — 401-only, excludes configured paths. */
+export function defaultRefreshPolicy(options: DefaultRefreshPolicyOptions = {}): RefreshPolicy {
+  const statuses = options.statuses ?? [401];
+  const excludePaths = options.excludePaths ?? [];
+
+  return ({ error, request }) => {
+    if (!statuses.includes(error.status)) return false;
+    for (const pattern of excludePaths) {
+      const matches = typeof pattern === 'string' ? request.url.includes(pattern) : pattern.test(request.url);
+      if (matches) return false;
+    }
+    return true;
+  };
 }

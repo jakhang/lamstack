@@ -21,6 +21,7 @@ export interface HttpMeta {
   mapError?: boolean;
   refresh?: boolean;
   [key: string]: unknown;
+  [key: symbol]: unknown;
 }
 
 /** Caller-facing request configuration. Every field is optional; `url` may be relative. */

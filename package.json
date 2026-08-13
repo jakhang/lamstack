@@ -1,15 +1,15 @@
 {
-  "name": "omnireact",
+  "name": "lamstack",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jakhang/omnireact.git"
+    "url": "git+https://github.com/jakhang/lamstack.git"
   },
   "bugs": {
-    "url": "https://github.com/jakhang/omnireact/issues"
+    "url": "https://github.com/jakhang/lamstack/issues"
   },
   "packageManager": "pnpm@10.27.0",
   "engines": {

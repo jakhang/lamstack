@@ -1,9 +1,43 @@
-# Migrating from 0.1 to 0.2
+# Migration Guide
+
+## Migrating from 0.2 to 0.3
+
+0.3.0 extracts the framework-independent task runner into its own package,
+[`@lamstack/initializer`](../initializer), and moves the React layer back to this
+package's root — the `/react` entry point from 0.2 is gone.
+
+### 1. Import path — `/react` is gone, everything is at the root
+
+`<Initializer>`, `useInitializer()`, and `InitializerContext` now live at the package
+root alongside `createInitializer`/`parallel`/task types (all still re-exported here from
+`@lamstack/initializer`, so existing non-React imports keep working unchanged).
+
+```diff
+-import { Initializer, useInitializer } from '@lamstack/react-initializer/react';
++import { Initializer, useInitializer } from '@lamstack/react-initializer';
+```
+
+The tradeoff: this package's root is now `'use client'` throughout, so it's no longer
+safe to import into a Next.js Server Component. If you only need the task runner (no
+React), install [`@lamstack/initializer`](../initializer) directly instead — it has no
+`'use client'` boundary and no React dependency.
+
+### 2. `createInitializationState`, `InitializerTimeoutError`, and all core types now live in `@lamstack/initializer`
+
+Still re-exported from `@lamstack/react-initializer`'s root, so this only matters if you
+want to depend on the framework-agnostic core directly:
+
+```diff
+-import { createInitializer } from '@lamstack/react-initializer';
++import { createInitializer } from '@lamstack/initializer';
+```
+
+## Migrating from 0.1 to 0.2
 
 0.2.0 replaces the dependency graph with a linear stage model and moves the React layer
 to its own entry point. Every breaking change is listed below with a before/after.
 
-## 1. Import path — the React layer moved to `/react`
+### 1. Import path — the React layer moved to `/react`
 
 `<Initializer>`, `useInitializer()`, and `InitializerContext` are no longer exported from
 the package root — they live at `@lamstack/react-initializer/react`. The root now only exports
@@ -20,7 +54,7 @@ is what makes it safe to import from a Next.js Server Component without pulling 
 `createInitializer`, task types (`InitializationTask`, `TaskEntry`, `ParallelGroup`), and
 state types stay at the root, unchanged.
 
-## 2. `dependsOn` is gone — restructure into stages
+### 2. `dependsOn` is gone — restructure into stages
 
 There is no dependency graph anymore. `tasks` is a plain ordered list of stages — a task,
 or a `parallel([...])` group — that run one after another. If a task used `dependsOn` to
@@ -59,7 +93,7 @@ within a single concurrent stage:
 +tasks={[taskA, taskB]}
 ```
 
-## 3. `'skipped'` no longer cascades — check for `'cancelled'` too if you relied on it
+### 3. `'skipped'` no longer cascades — check for `'cancelled'` too if you relied on it
 
 Previously, a task was `'skipped'` if a dependency failed, was itself skipped, or was
 cancelled. Now `'skipped'` only ever comes from a `condition` returning `false`. A task
@@ -77,7 +111,7 @@ manual `abort()`) is `'cancelled'` instead — even in cases that used to report
 If you only ever checked `condition`-driven skips, no change needed — that case still
 reports `'skipped'` exactly as before.
 
-## 4. `RunnerSnapshot` / `RunnerEvents` renamed
+### 4. `RunnerSnapshot` / `RunnerEvents` renamed
 
 ```diff
 -import type { RunnerSnapshot, RunnerEvents } from '@lamstack/react-initializer';
@@ -86,7 +120,7 @@ reports `'skipped'` exactly as before.
 
 `InitializerHandle.getSnapshot()`'s return type is the same shape, just renamed.
 
-## 5. `onComplete` now receives the final `state`
+### 5. `onComplete` now receives the final `state`
 
 ```diff
 -onComplete: () => {
@@ -98,7 +132,7 @@ reports `'skipped'` exactly as before.
 
 If you don't need `state`, no change needed — the extra argument is safe to ignore.
 
-## 6. Graph internals no longer exist
+### 6. Graph internals no longer exist
 
 `buildGraph`, `executeGraph`, `GraphNode`, and `ExecuteGraphResult` are gone — there's no
 graph to expose. If you imported any of these directly (unlikely — they were always
@@ -106,7 +140,7 @@ framed as internals), there's no replacement; the stage list itself (`tasks`) is
 only thing to inspect. `checkTasks(tasks)` (new in 0.2.0) surfaces the dev-mode
 diagnostics that used to require reading the graph — see the README.
 
-## Everything else
+### Everything else
 
 `retry`, `timeout`, `critical`, `condition`, `parallel()`, `splashScreen`/`errorScreen`,
 and the lifecycle events (`onTaskStart`/`onTaskComplete`/`onTaskFailed`/`onError`/

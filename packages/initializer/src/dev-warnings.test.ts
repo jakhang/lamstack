@@ -51,7 +51,7 @@ describe('warnAboutTasks', () => {
   it('logs each warning via console.warn, prefixed with the package name', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     warnAboutTasks([task('a', { retry: 3 })]);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[@lamstack/react-initializer]'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[@lamstack/initializer]'));
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('retry: 3 but no timeout'));
     warnSpy.mockRestore();
   });

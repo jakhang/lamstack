@@ -23,21 +23,35 @@ export default defineConfig([
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: ['@lamstack/react-dialog', '@lamstack/react-initializer'] },
+        { patterns: ['@lamstack/react-dialog', '@lamstack/react-initializer', '@lamstack/initializer'] },
       ],
     },
   },
   {
-    // Feature packages may only depend on @lamstack/react-core — no lateral imports.
-    files: ['packages/react-dialog/**/*.{ts,tsx}'],
+    // @lamstack/initializer (framework-agnostic) depends on nothing else in the repo.
+    files: ['packages/initializer/**/*.{ts,tsx}'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: ['@lamstack/react-initializer'] }],
+      'no-restricted-imports': [
+        'error',
+        { patterns: ['@lamstack/react-core', '@lamstack/react-dialog', '@lamstack/react-initializer'] },
+      ],
     },
   },
   {
+    // @lamstack/react-dialog may only depend on @lamstack/react-core — no lateral imports.
+    files: ['packages/react-dialog/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: ['@lamstack/react-initializer', '@lamstack/initializer'] },
+      ],
+    },
+  },
+  {
+    // @lamstack/react-initializer may only depend on @lamstack/initializer — no lateral imports.
     files: ['packages/react-initializer/**/*.{ts,tsx}'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: ['@lamstack/react-dialog'] }],
+      'no-restricted-imports': ['error', { patterns: ['@lamstack/react-dialog', '@lamstack/react-core'] }],
     },
   },
 ]);

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { InitializerContext, type InitializerContextValue } from './InitializerContext';
-import type { StateMap } from '../core/state';
+import type { StateMap } from '@lamstack/initializer';
 
 /**
  * Reads the current run state (`status`/`progress`/`tasks`/`error`),

@@ -1,6 +1,5 @@
 import * as React from 'react';
-import type { InitializerSnapshot } from '../core/runner';
-import type { InitializationState, StateMap } from '../core/state';
+import type { InitializerSnapshot, InitializationState, StateMap } from '@lamstack/initializer';
 
 export interface InitializerContextValue<S extends StateMap = StateMap> extends InitializerSnapshot {
   /** Restarts the whole run from the beginning. */

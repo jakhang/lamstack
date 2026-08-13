@@ -1,10 +1,16 @@
 'use client';
 import * as React from 'react';
-import { createInitializer, type InitializerHandle } from '../core/initializer';
-import type { InitializationError, InitializerEvents, InitializerSnapshot, TaskSnapshot } from '../core/runner';
-import { createInitializationState } from '../core/state';
-import type { StateMap } from '../core/state';
-import type { TaskEntry } from '../core/task';
+import {
+  createInitializer,
+  createInitializationState,
+  type InitializerHandle,
+  type InitializationError,
+  type InitializerEvents,
+  type InitializerSnapshot,
+  type TaskSnapshot,
+  type StateMap,
+  type TaskEntry,
+} from '@lamstack/initializer';
 import { InitializerContext } from './InitializerContext';
 
 const noop = () => {};

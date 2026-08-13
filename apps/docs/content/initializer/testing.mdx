@@ -11,7 +11,7 @@ API directly — no `render()`, no `act()`, just `await`:
 
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { createInitializer } from '@lamstack/react-initializer';
+import { createInitializer } from '@lamstack/initializer';
 
 it('retries a flaky task and eventually succeeds', async () => {
   let attempts = 0;
@@ -63,7 +63,7 @@ app need `waitFor` — the same reason `@lamstack/react-dialog`'s async `open()`
 ```tsx
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { Initializer } from '@lamstack/react-initializer/react';
+import { Initializer } from '@lamstack/react-initializer';
 
 it('renders the app once initialization completes', async () => {
   render(

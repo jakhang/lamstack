@@ -3,10 +3,15 @@
 A lightweight application-startup orchestrator for React. `<Initializer>` runs a sequence
 of stages — a task, or several running concurrently via `parallel([...])` — before
 rendering your app, with retry, timeout, and critical/non-critical failure handling built
-in. The task runner has no React dependency; the React layer is a thin adapter on top of
-it.
+in. This package is `'use client'` throughout; it wraps
+[`@lamstack/initializer`](../initializer), the framework-agnostic task runner, and
+re-exports its whole API from this package's root.
 
 > **Pre-1.0** (`0.x`): the API may still change between minor versions.
+>
+> If you only need the task runner without React — e.g. to keep a module safely
+> importable from a Next.js Server Component — install
+> [`@lamstack/initializer`](../initializer) directly instead of this package.
 
 ## Install
 
@@ -16,15 +21,9 @@ pnpm add @lamstack/react-initializer
 
 ## Usage
 
-The framework-independent core (`createInitializer`, `parallel`, task/state types) lives
-at the package root; `<Initializer>`/`useInitializer()` — the React layer, marked `'use
-client'` — live at `@lamstack/react-initializer/react`, so importing just the core never pulls
-a client-only boundary into a Server Component.
-
 ```tsx
-import { parallel } from '@lamstack/react-initializer';
+import { parallel, Initializer, useInitializer } from '@lamstack/react-initializer';
 import type { InitializationTask } from '@lamstack/react-initializer';
-import { Initializer, useInitializer } from '@lamstack/react-initializer/react';
 
 const initializeConfig: InitializationTask = {
   id: 'config',
@@ -111,10 +110,12 @@ get these as a plain `string[]` yourself — e.g. to assert on in a test.
 
 ## Framework-independent core
 
-`createInitializer` runs the same stage list outside of React entirely:
+`createInitializer` (re-exported here, or imported directly from
+[`@lamstack/initializer`](../initializer)) runs the same stage list outside of React
+entirely:
 
 ```ts
-import { createInitializer } from '@lamstack/react-initializer';
+import { createInitializer } from '@lamstack/initializer';
 
 const initializer = createInitializer({ tasks });
 initializer.subscribe(() => console.log(initializer.getSnapshot()));

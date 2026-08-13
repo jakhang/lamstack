@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Initializer } from './Initializer';
 import { useInitializer } from './useInitializer';
-import type { InitializationTask } from '../core/task';
+import type { InitializationTask } from '@lamstack/initializer';
 import type { ErrorScreenProps, SplashScreenProps } from './Initializer';
 
 function task(id: string, overrides: Partial<InitializationTask> = {}): InitializationTask {

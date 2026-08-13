@@ -75,7 +75,7 @@ cap.
 ## `<Initializer>`
 
 ```tsx
-import { Initializer } from '@lamstack/react-initializer/react';
+import { Initializer } from '@lamstack/react-initializer';
 
 <Initializer
   tasks={tasks}
@@ -152,10 +152,10 @@ const { status, progress, tasks, error, retry, abort, getState } = useInitialize
 ## `createInitializer()`
 
 The framework-independent core, used by `<Initializer>` internally and usable directly
-outside of React.
+outside of React — also re-exported from `@lamstack/react-initializer` for convenience.
 
 ```ts
-import { createInitializer } from '@lamstack/react-initializer';
+import { createInitializer } from '@lamstack/initializer';
 
 const initializer = createInitializer({ tasks, onError: reportToSentry });
 

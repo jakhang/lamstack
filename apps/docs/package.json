@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "prebuild": "pnpm --filter @lamstack/react-core --filter @lamstack/react-dialog --filter @lamstack/react-initializer run build",
+    "prebuild": "pnpm --filter @lamstack/react-core --filter @lamstack/react-dialog --filter @lamstack/initializer --filter @lamstack/react-initializer run build",
     "build": "next build --webpack",
     "postbuild": "pagefind --site .next/server/app --output-path public/_pagefind",
     "start": "next start",

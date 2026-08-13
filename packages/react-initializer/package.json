@@ -1,6 +1,6 @@
 {
   "name": "@lamstack/react-initializer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Headless app-startup orchestrator for React — run async init steps (with parallel batching, abort, and retry) before rendering your app.",
   "keywords": [
     "react",

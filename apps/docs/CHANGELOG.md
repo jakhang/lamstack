@@ -1,5 +1,13 @@
 # docs
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [49f9319]
+- Updated dependencies [711dd75]
+  - @lamstack/react-initializer@0.3.0
+
 ## 0.0.3
 
 ### Patch Changes

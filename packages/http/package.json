@@ -52,6 +52,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
+  "devDependencies": {
+    "axios": "^1.7.9"
+  },
   "publishConfig": {
     "access": "public"
   }

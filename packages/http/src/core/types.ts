@@ -102,5 +102,5 @@ export interface HttpAdapter {
     downloadProgress: boolean;
     stream: boolean;
   };
-  send<T>(request: HttpRequest): Promise<HttpResponse<T>>;
+  send<T = unknown>(request: HttpRequest): Promise<HttpResponse<T>>;
 }

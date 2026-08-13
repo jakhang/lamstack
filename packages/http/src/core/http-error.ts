@@ -1,0 +1,61 @@
+import type { HttpRequest, HttpResponse } from './types';
+
+export type HttpErrorCode = 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR';
+
+export interface HttpErrorOptions<T> {
+  code: HttpErrorCode;
+  /** 0 when there is no HTTP response. */
+  status: number;
+  data?: T;
+  request: HttpRequest;
+  response?: HttpResponse<T>;
+  cause?: unknown;
+}
+
+/**
+ * The only error type an `HttpAdapter` may throw — part of the adapter contract
+ * (SPEC.md §2.2), not something a plugin normalizes after the fact. `send()`
+ * resolves only for a 2xx response; every other outcome rejects with one of these.
+ */
+export class HttpError<T = unknown> extends Error {
+  readonly code: HttpErrorCode;
+  readonly status: number;
+  readonly data?: T;
+  readonly request: HttpRequest;
+  readonly response?: HttpResponse<T>;
+  readonly cause?: unknown;
+
+  constructor(message: string, options: HttpErrorOptions<T>) {
+    super(message);
+    this.name = 'HttpError';
+    this.code = options.code;
+    this.status = options.status;
+    this.data = options.data;
+    this.request = options.request;
+    this.response = options.response;
+    this.cause = options.cause;
+    Object.setPrototypeOf(this, HttpError.prototype);
+  }
+
+  get isNetworkError(): boolean {
+    return this.status === 0;
+  }
+
+  get isCanceled(): boolean {
+    return this.code === 'CANCELED';
+  }
+
+  static is(error: unknown): error is HttpError {
+    return error instanceof HttpError;
+  }
+
+  /** Wraps an arbitrary thrown value into an `HttpError`, passing an existing one through unchanged. */
+  static from(error: unknown, request: HttpRequest): HttpError {
+    if (HttpError.is(error)) return error;
+    if (error instanceof Error && error.name === 'AbortError') {
+      return new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause: error });
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return new HttpError(message, { code: 'NETWORK_ERROR', status: 0, request, cause: error });
+  }
+}

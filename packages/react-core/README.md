@@ -1,6 +1,6 @@
-# @omnireact/core
+# @lamstack/react-core
 
-Shared hooks used internally by `@omnireact/*` packages. Not feature-specific — usable
+Shared hooks used internally by `@lamstack/react-*` packages. Not feature-specific — usable
 standalone in any React 18+ project.
 
 Docs: **[omnireact-six.vercel.app](https://omnireact-six.vercel.app)**
@@ -8,7 +8,7 @@ Docs: **[omnireact-six.vercel.app](https://omnireact-six.vercel.app)**
 ## Install
 
 ```bash
-pnpm add @omnireact/core
+pnpm add @lamstack/react-core
 ```
 
 ## Exports
@@ -24,7 +24,7 @@ import {
   useEventCallback,
   useNonNullableContext,
   useIsomorphicLayoutEffect,
-} from '@omnireact/core';
+} from '@lamstack/react-core';
 ```
 
 ## License

@@ -1,23 +1,23 @@
 {
-  "name": "@omnireact/core",
+  "name": "@lamstack/react-core",
   "version": "0.1.0",
-  "description": "Shared internal hooks used across omnireact packages.",
+  "description": "Shared internal hooks used across lamstack React packages.",
   "keywords": [
     "react",
     "hooks",
     "headless",
-    "omnireact"
+    "lamstack"
   ],
   "license": "MIT",
   "author": "Ja Khang",
   "homepage": "https://omnireact-six.vercel.app",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jakhang/omnireact.git",
-    "directory": "packages/core"
+    "url": "git+https://github.com/jakhang/lamstack.git",
+    "directory": "packages/react-core"
   },
   "bugs": {
-    "url": "https://github.com/jakhang/omnireact/issues"
+    "url": "https://github.com/jakhang/lamstack/issues"
   },
   "type": "module",
   "sideEffects": false,

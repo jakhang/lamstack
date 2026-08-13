@@ -1,6 +1,6 @@
 {
   "name": "@lamstack/initializer",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Framework-agnostic app-startup orchestrator core — run async init steps (with parallel batching, abort, and retry) before your app renders.",
   "keywords": [
     "initializer",

@@ -12,7 +12,7 @@ export function useInitializer<S extends StateMap = StateMap>(): InitializerCont
   const value = React.useContext(InitializerContext);
   if (value === null) {
     throw new Error(
-      '[@omnireact/initializer] useInitializer() was called outside of <Initializer>. ' +
+      '[@lamstack/react-initializer] useInitializer() was called outside of <Initializer>. ' +
         'Wrap the component tree that calls it in <Initializer>.',
     );
   }

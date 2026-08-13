@@ -55,7 +55,7 @@ export function collectTaskWarnings<S extends StateMap>(entries: readonly TaskEn
 export function warnAboutTasks<S extends StateMap>(entries: readonly TaskEntry<S>[]): void {
   if (!isDev()) return;
   for (const warning of collectTaskWarnings(entries)) {
-    console.warn(`[@omnireact/initializer] ${warning}`);
+    console.warn(`[@lamstack/react-initializer] ${warning}`);
   }
 }
 

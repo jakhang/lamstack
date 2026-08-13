@@ -1,5 +1,5 @@
 {
-  "name": "@omnireact/initializer",
+  "name": "@lamstack/react-initializer",
   "version": "0.2.0",
   "description": "Headless app-startup orchestrator for React — run async init steps (with parallel batching, abort, and retry) before rendering your app.",
   "keywords": [
@@ -9,18 +9,18 @@
     "startup",
     "splash-screen",
     "headless",
-    "omnireact"
+    "lamstack"
   ],
   "license": "MIT",
   "author": "Ja Khang",
   "homepage": "https://omnireact-six.vercel.app/initializer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jakhang/omnireact.git",
-    "directory": "packages/initializer"
+    "url": "git+https://github.com/jakhang/lamstack.git",
+    "directory": "packages/react-initializer"
   },
   "bugs": {
-    "url": "https://github.com/jakhang/omnireact/issues"
+    "url": "https://github.com/jakhang/lamstack/issues"
   },
   "type": "module",
   "sideEffects": false,

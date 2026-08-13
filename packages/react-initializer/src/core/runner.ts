@@ -57,7 +57,7 @@ export interface InitializerEvents<S extends StateMap = StateMap> {
 
 export class InitializerTimeoutError extends Error {
   constructor(taskId: string, timeout: number) {
-    super(`[@omnireact/initializer] Task "${taskId}" timed out after ${timeout}ms`);
+    super(`[@lamstack/react-initializer] Task "${taskId}" timed out after ${timeout}ms`);
     this.name = 'InitializerTimeoutError';
   }
 }
@@ -107,7 +107,7 @@ export function validateTasks<S extends StateMap>(entries: readonly TaskEntry<S>
   const seen = new Set<string>();
   for (const task of tasks) {
     if (seen.has(task.id)) {
-      throw new Error(`[@omnireact/initializer] Duplicate task id: "${task.id}"`);
+      throw new Error(`[@lamstack/react-initializer] Duplicate task id: "${task.id}"`);
     }
     seen.add(task.id);
   }
@@ -153,7 +153,7 @@ async function runWithTimeout<S extends StateMap>(
   if (isDev()) {
     halfwayTimer = setTimeout(() => {
       console.warn(
-        `[@omnireact/initializer] Task "${task.id}" is still running past 50% of its ` +
+        `[@lamstack/react-initializer] Task "${task.id}" is still running past 50% of its ` +
           `${task.timeout}ms timeout.`,
       );
     }, task.timeout / 2);

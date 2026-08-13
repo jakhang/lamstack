@@ -6,15 +6,15 @@ to its own entry point. Every breaking change is listed below with a before/afte
 ## 1. Import path — the React layer moved to `/react`
 
 `<Initializer>`, `useInitializer()`, and `InitializerContext` are no longer exported from
-the package root — they live at `@omnireact/initializer/react`. The root now only exports
+the package root — they live at `@lamstack/react-initializer/react`. The root now only exports
 the framework-independent core (`createInitializer`, `parallel`, task/state types), which
 is what makes it safe to import from a Next.js Server Component without pulling in a
 `'use client'` boundary.
 
 ```diff
--import { Initializer, parallel, useInitializer } from '@omnireact/initializer';
-+import { parallel } from '@omnireact/initializer';
-+import { Initializer, useInitializer } from '@omnireact/initializer/react';
+-import { Initializer, parallel, useInitializer } from '@lamstack/react-initializer';
++import { parallel } from '@lamstack/react-initializer';
++import { Initializer, useInitializer } from '@lamstack/react-initializer/react';
 ```
 
 `createInitializer`, task types (`InitializationTask`, `TaskEntry`, `ParallelGroup`), and
@@ -80,8 +80,8 @@ reports `'skipped'` exactly as before.
 ## 4. `RunnerSnapshot` / `RunnerEvents` renamed
 
 ```diff
--import type { RunnerSnapshot, RunnerEvents } from '@omnireact/initializer';
-+import type { InitializerSnapshot, InitializerEvents } from '@omnireact/initializer';
+-import type { RunnerSnapshot, RunnerEvents } from '@lamstack/react-initializer';
++import type { InitializerSnapshot, InitializerEvents } from '@lamstack/react-initializer';
 ```
 
 `InitializerHandle.getSnapshot()`'s return type is the same shape, just renamed.

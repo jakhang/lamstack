@@ -1,4 +1,4 @@
-# @omnireact/initializer
+# @lamstack/react-initializer
 
 A lightweight application-startup orchestrator for React. `<Initializer>` runs a sequence
 of stages — a task, or several running concurrently via `parallel([...])` — before
@@ -11,20 +11,20 @@ it.
 ## Install
 
 ```bash
-pnpm add @omnireact/initializer
+pnpm add @lamstack/react-initializer
 ```
 
 ## Usage
 
 The framework-independent core (`createInitializer`, `parallel`, task/state types) lives
 at the package root; `<Initializer>`/`useInitializer()` — the React layer, marked `'use
-client'` — live at `@omnireact/initializer/react`, so importing just the core never pulls
+client'` — live at `@lamstack/react-initializer/react`, so importing just the core never pulls
 a client-only boundary into a Server Component.
 
 ```tsx
-import { parallel } from '@omnireact/initializer';
-import type { InitializationTask } from '@omnireact/initializer';
-import { Initializer, useInitializer } from '@omnireact/initializer/react';
+import { parallel } from '@lamstack/react-initializer';
+import type { InitializationTask } from '@lamstack/react-initializer';
+import { Initializer, useInitializer } from '@lamstack/react-initializer/react';
 
 const initializeConfig: InitializationTask = {
   id: 'config',
@@ -114,7 +114,7 @@ get these as a plain `string[]` yourself — e.g. to assert on in a test.
 `createInitializer` runs the same stage list outside of React entirely:
 
 ```ts
-import { createInitializer } from '@omnireact/initializer';
+import { createInitializer } from '@lamstack/react-initializer';
 
 const initializer = createInitializer({ tasks });
 initializer.subscribe(() => console.log(initializer.getSnapshot()));
@@ -128,7 +128,7 @@ initializer.abort();
 
 ## Non-goals
 
-`@omnireact/initializer` does exactly one thing: run a sequence of async startup steps
+`@lamstack/react-initializer` does exactly one thing: run a sequence of async startup steps
 before rendering the app. It is deliberately not a data-fetching layer, not a background
 job scheduler, and not a general dependency-graph runner — ordering is exactly the stage
 list plus `parallel()` within a stage, nothing more. It also has no SSR/Suspense

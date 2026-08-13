@@ -1,6 +1,6 @@
 'use client';
 import * as React from 'react';
-import { useNonNullableContext } from '@omnireact/core';
+import { useNonNullableContext } from '@lamstack/react-core';
 import { DialogsContext } from './dialog.context';
 import type { AlertOptions, ConfirmOptions, DialogHook, PromptOptions } from './types';
 

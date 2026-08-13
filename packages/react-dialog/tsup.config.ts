@@ -6,5 +6,5 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
-  external: ['react', '@omnireact/core'],
+  external: ['react', '@lamstack/react-core'],
 });

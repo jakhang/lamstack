@@ -1,5 +1,5 @@
 {
-  "name": "@omnireact/dialog",
+  "name": "@lamstack/react-dialog",
   "version": "0.1.1",
   "description": "Headless, imperative dialog API for React (alert/confirm/prompt + custom dialogs).",
   "keywords": [
@@ -8,18 +8,18 @@
     "modal",
     "headless",
     "toolpad",
-    "omnireact"
+    "lamstack"
   ],
   "license": "MIT",
   "author": "Ja Khang",
   "homepage": "https://omnireact-six.vercel.app/dialog",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jakhang/omnireact.git",
-    "directory": "packages/dialog"
+    "url": "git+https://github.com/jakhang/lamstack.git",
+    "directory": "packages/react-dialog"
   },
   "bugs": {
-    "url": "https://github.com/jakhang/omnireact/issues"
+    "url": "https://github.com/jakhang/lamstack/issues"
   },
   "type": "module",
   "sideEffects": false,
@@ -53,7 +53,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@omnireact/core": "workspace:*",
+    "@lamstack/react-core": "workspace:*",
     "invariant": "^2.2.4"
   },
   "devDependencies": {

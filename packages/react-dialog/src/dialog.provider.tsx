@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import invariant from 'invariant';
-import { useEventCallback } from '@omnireact/core';
+import { useEventCallback } from '@lamstack/react-core';
 import { DialogsContext } from './dialog.context';
 import type {
   CloseDialog,
@@ -118,7 +118,7 @@ export function DialogsProvider(props: DialogProviderProps) {
       // wrapper below, and any caller of the public `close()`/`CloseDialog`
       // API) — `entryToClose.resolve` in `finally` still carries the result
       // to the original `open()` promise regardless of this failure.
-      console.error('[@omnireact/dialog] onClose handler threw:', error);
+      console.error('[@lamstack/react-dialog] onClose handler threw:', error);
     } finally {
       // Always resolve + start closing the UI, even if onClose threw —
       // a failing side effect should not trap the dialog open forever.

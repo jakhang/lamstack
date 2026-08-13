@@ -1,6 +1,6 @@
 NOTICE
 
-@omnireact/dialog is a headless extraction and adaptation of MUI Toolpad Core's
+@lamstack/react-dialog is a headless extraction and adaptation of MUI Toolpad Core's
 `useDialogs` (https://mui.com/toolpad/core/react-use-dialogs/). The dialog stack
 management in `src/dialog.provider.tsx` — the stack shape, the WeakMap-based
 promise-to-entry lookup, the `requestDialog`/`closeDialog` functions, and the

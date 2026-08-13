@@ -1,4 +1,4 @@
-# @omnireact/dialog
+# @lamstack/react-dialog
 
 Headless, imperative dialog API for React — `useDialogs()` gives you `open`, `close`,
 `alert`, `confirm`, and `prompt`, all promise-based. You bring the actual dialog
@@ -8,14 +8,14 @@ components (whatever UI library you use); this package handles the stack, the im
 ## Install
 
 ```bash
-pnpm add @omnireact/dialog
+pnpm add @lamstack/react-dialog
 ```
 
 ## Usage
 
 ```tsx
-import { DialogsProvider, useDialogs } from '@omnireact/dialog';
-import type { DialogTemplates } from '@omnireact/dialog';
+import { DialogsProvider, useDialogs } from '@lamstack/react-dialog';
+import type { DialogTemplates } from '@lamstack/react-dialog';
 
 const templates: DialogTemplates = {
   alert: MyAlertDialog,

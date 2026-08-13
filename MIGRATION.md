@@ -42,6 +42,7 @@ the package name in your imports and `package.json`.
 
 ## Old packages
 
-The `@omnireact/core`, `@omnireact/dialog`, and `@omnireact/initializer` packages on npm are
-deprecated in favor of the `@lamstack/*` packages above. They are not being unpublished —
-existing installs keep working — but they will not receive further updates.
+The `@omnireact/core`, `@omnireact/dialog`, and `@omnireact/initializer` packages have been
+unpublished from npm — installing them will now fail. If you still depend on one of them,
+pin your lockfile and migrate to the matching `@lamstack/*` package above as soon as
+possible; there is no fallback version to fall back to.

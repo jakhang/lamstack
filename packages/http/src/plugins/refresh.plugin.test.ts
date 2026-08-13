@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HttpClient } from '../core/client';
 import { HttpError } from '../core/http-error';
+import { HttpEventBus } from '../core/http-event-bus';
 import { PluginOrder } from '../core/types';
 import type { HttpAdapter, HttpRequest, HttpResponse } from '../core/types';
 import { auth } from './auth.plugin';
@@ -48,9 +49,12 @@ describe('refreshPlugin — single refresh-and-retry', () => {
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
     const saveTokens = vi.fn(async () => {});
+    const events = new HttpEventBus();
+    const onTokenRefreshed = vi.fn();
+    events.on('token:refreshed', onTokenRefreshed);
 
     const client = new HttpClient({ adapter: main.adapter });
-    client.use(refresh({ tokenProvider: stubProvider({ saveTokens }), refreshClient }));
+    client.use(refresh({ tokenProvider: stubProvider({ saveTokens }), refreshClient, events }));
     client.use(auth(stubProvider()));
 
     const data = await client.get('/x');
@@ -59,6 +63,8 @@ describe('refreshPlugin — single refresh-and-retry', () => {
     expect(main.calls).toHaveLength(2);
     expect(refreshMock.calls).toHaveLength(1);
     expect(saveTokens).toHaveBeenCalledWith({ accessToken: 'new-token' });
+    expect(onTokenRefreshed).toHaveBeenCalledTimes(1);
+    expect(onTokenRefreshed).toHaveBeenCalledWith({});
   });
 
   it("re-enters only the inner chain on retry: the auth middleware runs twice, refreshPlugin's own handler runs once", async () => {
@@ -130,9 +136,14 @@ describe('refreshPlugin — single refresh-and-retry', () => {
     const refreshMock = scriptedAdapter(['unauthorized']);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
     const clear = vi.fn(async () => {});
+    const events = new HttpEventBus();
+    const onUnauthorized = vi.fn();
+    const onRefreshFailed = vi.fn();
+    events.on('unauthorized', onUnauthorized);
+    events.on('token:refresh-failed', onRefreshFailed);
 
     const client = new HttpClient({ adapter: main.adapter });
-    client.use(refresh({ tokenProvider: stubProvider({ clear }), refreshClient }));
+    client.use(refresh({ tokenProvider: stubProvider({ clear }), refreshClient, events }));
 
     const error: unknown = await client.get('/x').catch((e: unknown) => e);
 
@@ -141,20 +152,31 @@ describe('refreshPlugin — single refresh-and-retry', () => {
     expect((error as HttpError).cause).toBeInstanceOf(HttpError);
     expect(((error as HttpError).cause as HttpError).status).toBe(401);
     expect(clear).toHaveBeenCalledTimes(1);
+    expect(onRefreshFailed).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized.mock.calls[0][0].error).toBeInstanceOf(HttpError);
+    expect(onUnauthorized.mock.calls[0][0].error.status).toBe(401);
   });
 
-  it('does not attempt a refresh when tokenProvider.canRefresh() resolves false, and clears tokens', async () => {
+  it('does not attempt a refresh when tokenProvider.canRefresh() resolves false, clears tokens, and emits unauthorized', async () => {
     const main = scriptedAdapter(['unauthorized']);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
     const clear = vi.fn(async () => {});
+    const events = new HttpEventBus();
+    const onUnauthorized = vi.fn();
+    events.on('unauthorized', onUnauthorized);
 
     const client = new HttpClient({ adapter: main.adapter });
-    client.use(refresh({ tokenProvider: stubProvider({ canRefresh: async () => false, clear }), refreshClient }));
+    client.use(
+      refresh({ tokenProvider: stubProvider({ canRefresh: async () => false, clear }), refreshClient, events }),
+    );
 
     await expect(client.get('/x')).rejects.toMatchObject({ status: 401 });
     expect(refreshMock.calls).toHaveLength(0);
     expect(clear).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized.mock.calls[0][0].error).toBeInstanceOf(HttpError);
   });
 
   it('skips refresh entirely when the request meta.refresh is false', async () => {
@@ -260,11 +282,14 @@ describe('refreshPlugin — concurrent request queueing', () => {
     expect(mainCalls.filter((r) => r.headers.authorization === 'Bearer fresh-token')).toHaveLength(5);
   });
 
-  it('rejects each queued request with its own original error when the shared refresh fails, refreshing tokenProvider.clear() only once', async () => {
+  it('rejects each queued request with its own original error when the shared refresh fails, refreshing tokenProvider.clear() and emitting unauthorized only once', async () => {
     const { adapter: mainAdapter } = tokenAwareAdapter(() => 'never-valid');
     const provider = mutableProvider('stale-token');
     const clear = vi.fn(async () => {});
     provider.clear = clear;
+    const events = new HttpEventBus();
+    const onUnauthorized = vi.fn();
+    events.on('unauthorized', onUnauthorized);
 
     let refreshCallCount = 0;
     const refreshDone = deferred<void>();
@@ -280,7 +305,7 @@ describe('refreshPlugin — concurrent request queueing', () => {
     const refreshClient = new HttpClient({ adapter: refreshAdapter });
 
     const client = new HttpClient({ adapter: mainAdapter });
-    client.use(refresh({ tokenProvider: provider, refreshClient }));
+    client.use(refresh({ tokenProvider: provider, refreshClient, events }));
     client.use(auth(provider));
 
     const promises = [client.get('/a'), client.get('/b'), client.get('/c')].map((p) => p.catch((e: unknown) => e));
@@ -299,6 +324,7 @@ describe('refreshPlugin — concurrent request queueing', () => {
     // Each request got its own distinct HttpError, not a single shared rejection value.
     expect(new Set(errors).size).toBe(3);
     expect(clear).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
   it('a later 401 after the previous refresh already resolved triggers a fresh refresh, not a stale queue', async () => {

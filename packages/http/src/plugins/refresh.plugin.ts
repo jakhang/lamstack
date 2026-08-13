@@ -1,5 +1,6 @@
 import type { HttpClient } from '../core/client';
 import { HttpError } from '../core/http-error';
+import type { HttpEventBus } from '../core/http-event-bus';
 import { PluginOrder } from '../core/types';
 import type { HttpPlugin, HttpRequest } from '../core/types';
 import { defaultRefreshPolicy, type RefreshPolicy, type TokenProvider } from './token-provider';
@@ -18,6 +19,13 @@ export interface RefreshPluginOptions {
   shouldRefresh?: RefreshPolicy;
   /** Maximum refresh cycles per logical request. Defaults to 1. */
   maxAttempts?: number;
+  /**
+   * Optional session-level event bus. `'unauthorized'` fires once per
+   * request-that-can't-refresh and once per failed refresh cycle (never once
+   * per queued request); `'token:refreshed'`/`'token:refresh-failed'` fire
+   * once per refresh cycle.
+   */
+  events?: HttpEventBus;
 }
 
 function getAttempt(request: HttpRequest): number {
@@ -37,20 +45,28 @@ function getAttempt(request: HttpRequest): number {
  * original error on failure, not a value shared across every queued request.
  */
 export function refresh(options: RefreshPluginOptions): HttpPlugin {
-  const { tokenProvider, refreshClient, maxAttempts = 1 } = options;
+  const { tokenProvider, refreshClient, maxAttempts = 1, events } = options;
   const shouldRefresh = options.shouldRefresh ?? defaultRefreshPolicy();
 
   let inFlightRefresh: Promise<void> | null = null;
 
-  function performRefresh(): Promise<void> {
+  /**
+   * Shared by every request queued behind the same refresh cycle — `clear()`
+   * and the events below run exactly once per cycle here, never once per
+   * queued request (see `refresh.plugin.test.ts`'s concurrency suite).
+   */
+  function performRefresh(triggeringRequest: HttpRequest): Promise<void> {
     if (!inFlightRefresh) {
       inFlightRefresh = (async () => {
         try {
           const refreshInit = await tokenProvider.buildRefreshRequest();
           const refreshResponse = await refreshClient.request(refreshInit);
           await tokenProvider.saveTokens(refreshResponse.data);
+          events?.emit('token:refreshed', {});
         } catch (refreshError) {
           await tokenProvider.clear();
+          events?.emit('token:refresh-failed', { error: refreshError });
+          events?.emit('unauthorized', { error: HttpError.from(refreshError, triggeringRequest) });
           throw refreshError;
         } finally {
           inFlightRefresh = null;
@@ -83,11 +99,12 @@ export function refresh(options: RefreshPluginOptions): HttpPlugin {
           const canRefresh = await tokenProvider.canRefresh();
           if (!canRefresh) {
             await tokenProvider.clear();
+            events?.emit('unauthorized', { error });
             throw error;
           }
 
           try {
-            await performRefresh();
+            await performRefresh(currentRequest);
           } catch (refreshError) {
             throw new HttpError(error.message, {
               code: error.code,

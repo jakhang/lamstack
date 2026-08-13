@@ -17,4 +17,27 @@ export default defineConfig([
       globals: { ...globals.browser, ...globals.node },
     },
   },
+  {
+    // @lamstack/react-core depends on nothing else in the repo.
+    files: ['packages/react-core/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: ['@lamstack/react-dialog', '@lamstack/react-initializer'] },
+      ],
+    },
+  },
+  {
+    // Feature packages may only depend on @lamstack/react-core — no lateral imports.
+    files: ['packages/react-dialog/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: ['@lamstack/react-initializer'] }],
+    },
+  },
+  {
+    files: ['packages/react-initializer/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: ['@lamstack/react-dialog'] }],
+    },
+  },
 ]);

@@ -74,21 +74,21 @@ importers:
       '@emotion/styled':
         specifier: ^11.14.1
         version: 11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react@19.2.8)
+      '@lamstack/react-core':
+        specifier: workspace:*
+        version: link:../../packages/react-core
+      '@lamstack/react-dialog':
+        specifier: workspace:*
+        version: link:../../packages/react-dialog
+      '@lamstack/react-initializer':
+        specifier: workspace:*
+        version: link:../../packages/react-initializer
       '@mui/material':
         specifier: ^9.3.1
         version: 9.3.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.8))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@mui/material-nextjs':
         specifier: ^9.3.0
         version: 9.3.0(@emotion/cache@11.14.0)(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(next@16.3.0(@babel/core@7.29.7)(@types/node@26.2.0)(babel-plugin-macros@3.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
-      '@omnireact/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@omnireact/dialog':
-        specifier: workspace:*
-        version: link:../../packages/dialog
-      '@omnireact/initializer':
-        specifier: workspace:*
-        version: link:../../packages/initializer
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -139,17 +139,17 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3
 
-  packages/core:
+  packages/react-core:
     dependencies:
       react:
         specifier: '>=18'
         version: 19.2.8
 
-  packages/dialog:
+  packages/react-dialog:
     dependencies:
-      '@omnireact/core':
+      '@lamstack/react-core':
         specifier: workspace:*
-        version: link:../core
+        version: link:../react-core
       invariant:
         specifier: ^2.2.4
         version: 2.2.4
@@ -161,7 +161,7 @@ importers:
         specifier: ^2.2.37
         version: 2.2.37
 
-  packages/initializer:
+  packages/react-initializer:
     dependencies:
       react:
         specifier: '>=18'

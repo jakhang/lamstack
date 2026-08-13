@@ -9,9 +9,14 @@ import type {
   Middleware,
   Next,
 } from './types';
+import { FormBuilder } from '../serializers/form-builder';
+import { WebFileSerializer } from '../serializers/web-file.serializer';
+import type { FileSerializer } from '../serializers/file-serializer';
 
 export interface HttpClientOptions extends ResolveDefaults {
   adapter: HttpAdapter;
+  /** Strategy for appending non-primitive values to the `FormData` built by `upload()`. Defaults to `WebFileSerializer`. */
+  fileSerializer?: FileSerializer;
 }
 
 type VerbInit = Omit<HttpRequestInit, 'url' | 'method' | 'body'>;
@@ -20,12 +25,16 @@ export class HttpClient {
   private readonly adapter: HttpAdapter;
   private readonly defaults: ResolveDefaults;
   private readonly plugins: (Middleware | HttpPlugin)[];
+  private readonly fileSerializer: FileSerializer;
+  private readonly formBuilder: FormBuilder;
 
   constructor(options: HttpClientOptions, plugins: readonly (Middleware | HttpPlugin)[] = []) {
-    const { adapter, ...defaults } = options;
+    const { adapter, fileSerializer, ...defaults } = options;
     this.adapter = adapter;
     this.defaults = defaults;
     this.plugins = [...plugins];
+    this.fileSerializer = fileSerializer ?? new WebFileSerializer();
+    this.formBuilder = new FormBuilder(this.fileSerializer);
   }
 
   use(plugin: Middleware | HttpPlugin): this {
@@ -71,6 +80,25 @@ export class HttpClient {
   }
 
   /**
+   * Uploads `data` as `multipart/form-data`. A plain object is built into a
+   * `FormData` via the configured `fileSerializer` (default `WebFileSerializer`);
+   * an existing `FormData` is sent through as-is. Never sets an explicit
+   * `Content-Type` — the adapter's transport must generate the multipart
+   * boundary itself.
+   */
+  async upload<T = unknown>(url: string, data: Record<string, unknown> | FormData, init?: VerbInit): Promise<T> {
+    const body = data instanceof FormData ? data : this.formBuilder.build(data);
+    const response = await this.request<T>({ ...init, url, method: 'POST', body });
+    return response.data;
+  }
+
+  /** GET request whose response is resolved as a `Blob`. */
+  async download(url: string, init?: VerbInit): Promise<Blob> {
+    const response = await this.request<Blob>({ ...init, url, method: 'GET', responseType: 'blob' });
+    return response.data;
+  }
+
+  /**
    * A new, independent `HttpClient` inheriting the parent's options and the
    * plugins registered so far — a snapshot, not a live link. Registering a
    * plugin on either client afterward does not affect the other. Typically
@@ -82,6 +110,7 @@ export class HttpClient {
     return new HttpClient(
       {
         adapter: options.adapter ?? this.adapter,
+        fileSerializer: options.fileSerializer ?? this.fileSerializer,
         baseURL: options.baseURL ?? this.defaults.baseURL,
         headers: options.headers ?? this.defaults.headers,
         timeout: options.timeout ?? this.defaults.timeout,

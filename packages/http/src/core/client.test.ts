@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { fetchAdapter } from '../adapters/fetch.adapter';
 import { HttpClient } from './client';
 import type { HttpAdapter, HttpHeaders, HttpRequest, HttpResponse } from './types';
+
+function captureFetch() {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const fetchStub = (async (url: string | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init: init ?? {} });
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+  return { calls, fetchStub };
+}
 
 function fakeAdapter(handler: (request: HttpRequest) => Partial<HttpResponse>): HttpAdapter {
   return {
@@ -144,5 +157,44 @@ describe('HttpClient — extend()', () => {
     await child.get('/users');
 
     expect(seenUrl).toBe('https://b.com/api/users');
+  });
+});
+
+describe('HttpClient — upload()', () => {
+  it('builds FormData from a plain object and sends it via POST without an explicit Content-Type', async () => {
+    const { calls, fetchStub } = captureFetch();
+    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
+
+    const data = await client.upload<{ ok: boolean }>('/x', { name: 'a', count: 1 });
+
+    expect(data).toEqual({ ok: true });
+    expect(calls[0].init.method).toBe('POST');
+    expect(calls[0].init.body).toBeInstanceOf(FormData);
+    expect((calls[0].init.body as FormData).get('name')).toBe('a');
+    expect((calls[0].init.body as FormData).get('count')).toBe('1');
+    expect((calls[0].init.headers as Record<string, string>)['content-type']).toBeUndefined();
+  });
+
+  it('sends a FormData value through as-is, without rebuilding it', async () => {
+    const { calls, fetchStub } = captureFetch();
+    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
+    const formData = new FormData();
+    formData.append('preset', 'value');
+
+    await client.upload('/x', formData);
+
+    expect(calls[0].init.body).toBe(formData);
+  });
+});
+
+describe('HttpClient — download()', () => {
+  it('returns a Blob', async () => {
+    const fetchStub = (async () => new Response(new Blob(['binary-data']), { status: 200 })) as typeof fetch;
+    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
+
+    const blob = await client.download('/x');
+
+    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.size).toBeGreaterThan(0);
   });
 });

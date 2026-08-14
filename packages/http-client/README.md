@@ -3,9 +3,9 @@
 A framework-agnostic HTTP client core built around a pluggable, Koa/onion-style
 middleware pipeline. The core has **zero runtime dependency on axios or fetch** — you
 choose a transport adapter (`fetch` or `axios`, both included) and layer behavior
-(auth, token refresh, error mapping, or anything you write yourself) on top via a single
-`.use()` API. No plugin shipped with this package — not `auth`, not `refresh` — has any
-capability you don't also have.
+(credential attachment, failure recovery, error mapping, or anything you write yourself)
+on top via a single `.use()` API. No plugin shipped with this package — not `auth`, not
+`recover` — has any capability you don't also have.
 
 > **Pre-1.0** (`0.x`): the API may still change between minor versions. `retryPlugin` and
 > upload/download progress are architected for (see [`PluginOrder`](#pluginorder) and
@@ -15,47 +15,48 @@ capability you don't also have.
 
 ## Table of contents
 
-- [Why this exists](#why-this-exists)
-- [Install](#install)
-- [Quick start](#quick-start)
-- [Core concepts](#core-concepts)
-  - [The request lifecycle](#the-request-lifecycle)
-  - [Resolution rules](#resolution-rules)
-  - [The middleware pipeline](#the-middleware-pipeline)
-  - [`PluginOrder`](#pluginorder)
-  - [`meta` flags](#meta-flags)
-- [Adapters](#adapters)
-  - [`fetchAdapter()`](#fetchadapter)
-  - [`axiosAdapter()`](#axiosadapter)
-  - [Writing your own adapter](#writing-your-own-adapter)
-- [`HttpClient` API](#httpclient-api)
-- [Authentication and token refresh](#authentication-and-token-refresh)
-  - [The `TokenProvider` contract](#the-tokenprovider-contract)
-  - [`auth`](#auth)
-  - [`refresh`](#refresh)
-  - [Built-in token providers](#built-in-token-providers)
-  - [Writing your own `TokenProvider`](#writing-your-own-tokenprovider)
-- [Session events (`HttpEventBus`)](#session-events-httpeventbus)
-- [Error handling](#error-handling)
-- [File uploads](#file-uploads)
-- [Downloads](#downloads)
-- [Cancellation](#cancellation)
-- [Writing your own plugin](#writing-your-own-plugin)
-- [Testing code that uses this package](#testing-code-that-uses-this-package)
-- [TypeScript](#typescript)
-- [Roadmap](#roadmap)
-- [Credits](#credits)
-- [License](#license)
+- [@lamstack/http-client](#lamstackhttp-client)
+  - [Table of contents](#table-of-contents)
+  - [Why this exists](#why-this-exists)
+  - [Install](#install)
+  - [Quick start](#quick-start)
+  - [Core concepts](#core-concepts)
+    - [The request lifecycle](#the-request-lifecycle)
+    - [Resolution rules](#resolution-rules)
+    - [The middleware pipeline](#the-middleware-pipeline)
+    - [`PluginOrder`](#pluginorder)
+    - [`meta` flags](#meta-flags)
+  - [Adapters](#adapters)
+    - [`fetchAdapter()`](#fetchadapter)
+    - [`axiosAdapter()`](#axiosadapter)
+    - [Writing your own adapter](#writing-your-own-adapter)
+  - [`HttpClient` API](#httpclient-api)
+  - [Authentication and recovery](#authentication-and-recovery)
+    - [`auth` and `Authenticator`](#auth-and-authenticator)
+    - [Built-in authenticators](#built-in-authenticators)
+    - [`recover`](#recover)
+    - [The `TokenProvider` contract and built-in strategies](#the-tokenprovider-contract-and-built-in-strategies)
+    - [Recovery events (`EventBus`)](#recovery-events-eventbus)
+  - [Error handling](#error-handling)
+  - [File uploads](#file-uploads)
+  - [Downloads](#downloads)
+  - [Cancellation](#cancellation)
+  - [Writing your own plugin](#writing-your-own-plugin)
+  - [Testing code that uses this package](#testing-code-that-uses-this-package)
+  - [TypeScript](#typescript)
+  - [Roadmap](#roadmap)
+  - [Credits](#credits)
+  - [License](#license)
 
 ## Why this exists
 
-Most HTTP client wrappers pick a transport (axios, or `fetch`) and bolt auth/refresh
+Most HTTP client wrappers pick a transport (axios, or `fetch`) and bolt auth/recovery
 logic onto it via that transport's own interceptor system. That logic then can't move to
 a different transport, and typically can't be unit-tested without mocking the transport
-itself. This package inverts that: the pipeline (auth, refresh, error mapping, retry
+itself. This package inverts that: the pipeline (auth, recovery, error mapping, retry
 policy, anything else) is transport-agnostic middleware; adapters are a thin,
 interchangeable translation layer between that pipeline and a real transport. The same
-`auth`/`refresh` setup works identically whether the underlying adapter is `fetch` or an
+`auth`/`recover` setup works identically whether the underlying adapter is `fetch` or an
 existing `axios` instance — proven by a shared contract test suite that runs both
 adapters through identical scenarios (200/404/500/timeout/abort/...) and asserts
 identical results.
@@ -161,24 +162,25 @@ interface HttpPlugin {
 }
 ```
 
-`client.use()` accepts either a bare `Middleware` function (defaults to `order: 0`) or a
-full `HttpPlugin` object. Plugins run in `order` order — ties preserve registration order.
+`client.use()` accepts either a bare `Middleware` function (defaults to
+`PluginOrder.normalize`) or a full `HttpPlugin` object. Plugins run in `order` order —
+ties preserve registration order.
 
 **`next()` is re-entrant.** A middleware may call it more than once; each call re-runs
 only the chain _after_ that middleware, never anything that already ran. This is what
-lets `refresh` retry a request after a token refresh without re-running whatever is
-registered outside it (logging, tracing, ...):
+lets `recover` retry a request after recovering credentials without re-running whatever
+is registered outside it (logging, tracing, ...):
 
 ```text
-register order:  observe(-200)  →  refresh(0)  →  auth(100)  →  transport (adapter)
+register order:  observe(-200)  →  recover(0)  →  auth(100)  →  transport (adapter)
 
 401 on first attempt:
-  observe runs (once) → refresh runs → auth runs → transport throws 401
+  observe runs (once) → recover runs → auth runs → transport throws 401
                               ↓
-                         refresh catches it, refreshes the token,
+                         recover catches it, runs its recover() callback,
                          calls next() AGAIN — only auth + transport re-run:
                               ↓
-                         auth runs (2nd time, fresh token) → transport → 200
+                         auth runs (2nd time, fresh credential) → transport → 200
 ```
 
 ### `PluginOrder`
@@ -187,7 +189,7 @@ register order:  observe(-200)  →  refresh(0)  →  auth(100)  →  transport 
 export const PluginOrder = {
   observe: -200,
   normalize: -100,
-  refresh: 0,
+  recover: 0,
   retry: 50, // reserved for v1.1's retryPlugin — nothing uses this slot yet
   auth: 100,
   transport: 200,
@@ -195,23 +197,40 @@ export const PluginOrder = {
 ```
 
 These are public, semver-stable ordering slots — `errorMapper` registers at `normalize`,
-`refresh` at `refresh`, `auth` at `auth`. Write your own plugins against these constants
-(e.g. `PluginOrder.auth - 1` to run just inside auth) instead of hardcoded numbers.
+`recover` at `recover`, `auth` at `auth`. A plain `client.use(fn)` (not wrapped in an
+`HttpPlugin`) defaults to `PluginOrder.normalize` too — deliberately not `recover`'s slot,
+so it never silently interleaves with recovery retries purely by registration order.
+Write your own plugins against these constants (e.g. `PluginOrder.auth - 1` to run just
+inside auth) instead of hardcoded numbers.
 
 ### `meta` flags
 
-Every resolved `HttpRequest` carries a `meta` bag. The three built-in plugins each
-respect one boolean flag on it, settable per request:
+Every resolved `HttpRequest` carries a `meta` bag. Only `errorMapper` reads a flag on it
+automatically:
 
 ```ts
-await client.get('/public-data', { meta: { auth: false } }); // auth skips this request
-await client.get('/x', { meta: { refresh: false } }); // refresh never attempts a retry
 await client.get('/x', { meta: { mapError: false } }); // errorMapper leaves the error as-is
 ```
 
+`auth`/`recover` don't read any `meta` flag automatically — both are fully generic
+(`options.skip` / `shouldRecover`), so a per-request opt-out is something you compose
+into that callback yourself:
+
+```ts
+client.use(
+  recover({
+    recover: renewSession,
+    shouldRecover: (ctx) => ctx.request.meta.recover !== false && onStatus(401)(ctx),
+  }),
+);
+
+await client.get('/x', { meta: { recover: false } }); // this request opts out
+```
+
 `meta` is also where you can stash your own per-request data for a custom plugin to
-read. Internal plugin state (like refresh's retry-attempt counter) uses a `Symbol.for(...)`
-key instead of a string, specifically so it can never collide with anything you put here.
+read. Internal plugin state (like `recover`'s attempt/generation counters) uses a
+`Symbol.for(...)` key instead of a string, specifically so it can never collide with
+anything you put here.
 
 ## Adapters
 
@@ -319,23 +338,140 @@ new HttpClient({
 | `download(url, init?)`           | `Promise<Blob>`            | Forces `responseType: 'blob'`                                                                                                                                          |
 | `extend(options?)`               | `HttpClient`               | New client, options merged over the parent's, **inheriting the plugins registered so far** (a snapshot — later `.use()` calls on either client don't affect the other) |
 
-`extend()` is what you use to build a `refreshClient` — call it _before_ registering
-`auth`/`refresh` on the main client, so the extended client inherits neither and can't
-recurse into its own refresh logic:
+`extend()` is what you use to build a client for `recover()`'s own callback to call the
+refresh endpoint with — call it _before_ registering `auth`/`recover` on the main client,
+so the extended client inherits neither and can't recurse into its own recovery logic:
 
 ```ts
 const client = new HttpClient({ adapter: fetchAdapter(), baseURL: '/api' });
 const refreshClient = client.extend({}); // no plugins yet — safe to use for the refresh call itself
-client.use(refresh({ tokenProvider, refreshClient }));
-client.use(auth(tokenProvider));
+
+client.use(
+  recover({
+    recover: async () => {
+      const response = await refreshClient.post<{ accessToken: string }>('/auth/refresh');
+      tokenProvider.saveTokens(response);
+    },
+  }),
+);
+client.use(auth(bearer(tokenProvider)));
 ```
 
-## Authentication and token refresh
+Every field on `extend()`'s options falls back to the parent's via `??`, so passing a
+field as explicit `undefined` doesn't unset it, and passing `headers` replaces the
+parent's wholesale rather than merging with them (unlike a per-request `headers`
+override, which layers on top).
 
-### The `TokenProvider` contract
+## Authentication and recovery
 
-`auth` and `refresh` are both built entirely on this interface — your own implementation
-has exactly the same capabilities as the two shipped strategies:
+Two independent, narrow contracts replace what a single monolithic `TokenProvider`
+interface would otherwise have to do: **`auth`** attaches credentials to every request;
+**`recover`** detects an eligible failure, runs a recovery step, and retries. Neither
+knows anything about the other, and neither is privileged over a plugin you write
+yourself.
+
+### `auth` and `Authenticator`
+
+```ts
+import { auth } from '@lamstack/http-client';
+
+type Authenticator = (request: HttpRequest) => Awaitable<HttpRequest>;
+
+client.use(auth(myAuthenticator));
+client.use(auth(myAuthenticator, { skip: (request) => request.url.startsWith('/public') }));
+```
+
+`auth()` is deliberately thin: it applies an `Authenticator` — any
+`(request) => Awaitable<HttpRequest>` — to every outgoing request, with an optional
+`skip` predicate for requests that shouldn't be authenticated at all. Everything about
+_how_ (a Bearer token, an API key, a request signature, several combined) lives in the
+`Authenticator` itself, not in the plugin.
+
+### Built-in authenticators
+
+```ts
+import { allOf, apiKey, basic, bearer } from '@lamstack/http-client';
+
+// The common case — a Bearer token from any source with getAccessToken():
+client.use(auth(bearer(tokenProvider)));
+client.use(auth(bearer(tokenProvider, { header: 'x-api-key', scheme: '' }))); // custom header, no "Bearer " prefix
+client.use(auth(bearer(() => currentToken))); // or a plain function
+
+// A static or dynamically-resolved API key, as a header or a query parameter:
+client.use(auth(apiKey({ in: 'header', name: 'x-api-key', value: process.env.API_KEY! })));
+client.use(auth(apiKey({ in: 'query', name: 'key', value: async () => rotateKey() })));
+
+// HTTP Basic auth:
+client.use(auth(basic(username, password)));
+
+// Compose several — e.g. a bearer token plus a request signature:
+client.use(
+  auth(
+    allOf(bearer(tokenProvider), async (request) => ({
+      ...request,
+      headers: { ...request.headers, 'x-signature': await sign(request) },
+    })),
+  ),
+);
+```
+
+`bearer()` never emits a literal `"Bearer null"` — if its source resolves `null`/no
+token, the header is simply left unset. Any `TokenProvider` (below) satisfies `bearer()`'s
+source contract directly via its `getAccessToken()` method, so an existing provider slots
+straight into `auth(bearer(provider))`.
+
+### `recover`
+
+```ts
+import { onStatus, recover } from '@lamstack/http-client';
+
+client.use(
+  recover({
+    recover: async () => {
+      const response = await refreshClient.post<{ accessToken: string }>('/auth/refresh');
+      await tokenProvider.saveTokens(response);
+    },
+    shouldRecover: onStatus(401, { exclude: ['/auth/login', '/auth/refresh'] }), // default: onStatus(401)
+    canRecover: () => tokenProvider.canRefresh(), // optional — skips a doomed cycle before it starts
+    maxAttempts: 1, // default — one recovery cycle per logical request
+    events: recoveryEvents, // optional EventBus<RecoveryEventMap> — see below
+  }),
+);
+```
+
+`recover`'s only required option is `recover: () => Promise<void>` — a single async step
+run once per cycle, shared by every request queued behind it. It doesn't have to be an
+HTTP call: `firebaseUser.getIdToken(true)`, an OS keychain refresh, or a resync over a
+`BroadcastChannel` all fit the same shape.
+
+On an eligible failure (401 by default, via `shouldRecover`):
+
+1. If `canRecover` is given and resolves `false`, emits `recovery:unavailable` and
+   rethrows the original error immediately — no cycle attempted.
+2. Otherwise runs `recover()` (deduplicated — see Concurrency below).
+3. Retries the original request via a **re-entrant `next()` call** — never by re-running
+   the pipeline from the top, so anything registered outside `recover` (including `auth`,
+   which re-runs and picks up the new credential) never re-runs from scratch.
+4. If `recover()` itself throws: emits `recovery:failed`, and rethrows the **original**
+   request's error with the recovery failure attached via `.cause`.
+
+`recover()` calls no cleanup itself on failure — wire that yourself via events (below),
+e.g. `events.on('recovery:failed', () => tokenProvider.clear())`.
+
+**Concurrency:** if several requests fail at once while a cycle is already in flight,
+they share that one cycle (no duplicate recovery calls) — but each still resolves or
+rejects independently. If the shared cycle fails, every queued request rejects with
+**its own** original error (not one shared value), each carrying the same recovery
+failure via `.cause`. A request that fails _after_ a **different** request's cycle
+already completed and rotated the credential retries directly with it instead of
+starting a redundant cycle — tracked via an internal generation counter, no configuration
+needed.
+
+### The `TokenProvider` contract and built-in strategies
+
+`TokenProvider` predates the `auth`/`recover` split and is unchanged — it's still the
+shape both shipped strategies implement, and its `getAccessToken()` alone is all
+`bearer()` needs:
 
 ```ts
 interface TokenProvider {
@@ -344,64 +480,11 @@ interface TokenProvider {
   clear(): Awaitable<void>;
   canRefresh(): Awaitable<boolean>;
   buildRefreshRequest(): Awaitable<HttpRequestInit>;
-  decorate?(request: HttpRequest): HttpRequest; // optional — e.g. set credentials: 'include'
+  decorate?(request: HttpRequest): HttpRequest; // legacy escape hatch — auth() no longer calls this, see below
 }
 ```
 
 (`Awaitable<T>` is `T | Promise<T>` — every method may be sync or async.)
-
-### `auth`
-
-```ts
-import { auth } from '@lamstack/http-client';
-
-client.use(auth(tokenProvider));
-client.use(auth(tokenProvider, { header: 'x-api-key', scheme: '' })); // custom header, no "Bearer " prefix
-```
-
-Attaches `Authorization: Bearer <token>` (or your configured header/scheme) to every
-request, calling `tokenProvider.decorate?.()` first if defined. Never emits a literal
-`"Bearer null"` — if `getAccessToken()` resolves `null`, the header is simply left unset.
-Skips itself entirely when `meta.auth === false`.
-
-### `refresh`
-
-```ts
-import { refresh, defaultRefreshPolicy } from '@lamstack/http-client';
-
-client.use(
-  refresh({
-    tokenProvider,
-    refreshClient, // see extend() above
-    shouldRefresh: defaultRefreshPolicy({
-      statuses: [401], // default
-      excludePaths: ['/auth/login', '/auth/refresh'], // never trigger a refresh loop on these
-    }),
-    maxAttempts: 1, // default — one refresh cycle per logical request
-    events: httpEvents, // optional HttpEventBus — see below
-  }),
-);
-```
-
-On an eligible failure (401 by default), `refresh`:
-
-1. Calls `tokenProvider.canRefresh()` — if `false`, clears tokens, emits `'unauthorized'`,
-   and rethrows the original error immediately.
-2. Otherwise calls `tokenProvider.buildRefreshRequest()` and sends it through
-   `refreshClient`, then `tokenProvider.saveTokens(response.data)`.
-3. Retries the original request via a **re-entrant `next()` call** — never by re-running
-   the pipeline from the top, so anything registered outside `refresh` never re-runs.
-4. If the refresh call itself fails: clears tokens, emits `'token:refresh-failed'` and
-   `'unauthorized'`, and rethrows the **original** request's error with the refresh
-   failure attached via `.cause`.
-
-**Concurrency:** if several requests fail at once while a refresh is already in flight,
-they share that one refresh call (no duplicate refresh requests) — but each still
-resolves or rejects independently. If the shared refresh fails, every queued request
-rejects with **its own** original error (not one shared value), each carrying the same
-refresh failure via `.cause`.
-
-### Built-in token providers
 
 **`LocalStorageTokenProvider`** — for backends that return `accessToken`/`refreshToken`
 in the JSON response body:
@@ -416,13 +499,27 @@ const tokenProvider = new LocalStorageTokenProvider({
   refreshTokenKey: 'refresh_token', // default
   // parser?: defaults to reading { accessToken }, { data: { accessToken } }, or { access_token }
 });
+
+client.use(
+  recover({
+    recover: async () => {
+      const refreshInit = await tokenProvider.buildRefreshRequest();
+      const response = await refreshClient.request(refreshInit);
+      await tokenProvider.saveTokens(response.data);
+    },
+    canRecover: () => tokenProvider.canRefresh(),
+  }),
+);
+client.use(auth(bearer(tokenProvider)));
 ```
 
 **`CookieHttpOnlyTokenProvider`** — for backends that issue the refresh token as an
 HttpOnly cookie the browser sends automatically. The access token lives in memory only
 (never persisted); `canRefresh()` can't verify the cookie exists (JS can't read an
 HttpOnly cookie) so it trusts a `SIGNED_IN` flag in `store` instead, letting the backend
-reject the refresh call if the cookie is actually gone:
+reject the refresh call if the cookie is actually gone. `auth()` no longer calls
+`provider.decorate()` automatically — declare `credentials: 'include'` on the client
+itself instead, so cookies are sent on every request:
 
 ```ts
 import { CookieHttpOnlyTokenProvider } from '@lamstack/http-client';
@@ -431,6 +528,8 @@ const tokenProvider = new CookieHttpOnlyTokenProvider({
   store: window.localStorage, // only stores the sign-in flag, never a token
   refreshUrl: '/auth/refresh',
 });
+
+const client = new HttpClient({ adapter: fetchAdapter(), credentials: 'include' });
 ```
 
 Both accept any `Storage`-shaped object:
@@ -445,44 +544,49 @@ interface Storage {
 
 — `localStorage`, React Native's `AsyncStorage`, or a plain `Map` wrapper all qualify.
 
-### Writing your own `TokenProvider`
-
 Nothing above is special-cased — a third strategy (e.g. a multi-tenant token store, or
-one backed by a secure OS keychain) implements the same six methods and works with
-`auth`/`refresh` exactly the same way.
+one backed by a secure OS keychain) implements the same shape and works with
+`auth(bearer(...))`/`recover(...)` exactly the same way.
 
-## Session events (`HttpEventBus`)
+> **Note:** a `tokenSession()`/`TokenStore` helper meant to eventually wrap the
+> `recover`+`TokenProvider` wiring above into one call is sketched in the redesign this
+> section is based on, but its exact shape is still undecided — not implemented yet.
+> `LocalStorageTokenProvider`/`CookieHttpOnlyTokenProvider` are the supported path today.
 
-A typed pub/sub for session-level state — deliberately separate from the request
-pipeline, since these describe the _session_, not any one request:
+### Recovery events (`EventBus`)
+
+A generic typed pub/sub, not specific to auth — `recover()` defines its own event map on
+top of it:
 
 ```ts
-import { HttpEventBus } from '@lamstack/http-client';
+import { EventBus } from '@lamstack/http-client';
+import type { RecoveryEventMap } from '@lamstack/http-client';
 
-const httpEvents = new HttpEventBus();
+const recoveryEvents = new EventBus<RecoveryEventMap>();
 
-const unsubscribe = httpEvents.on('unauthorized', ({ error }) => {
+const unsubscribe = recoveryEvents.on('recovery:failed', ({ error }) => {
+  tokenProvider.clear();
   redirectToLogin();
 });
 // later: unsubscribe();
 
-httpEvents.on('token:refreshed', () => console.log('session renewed'));
-httpEvents.on('token:refresh-failed', ({ error }) => reportToSentry(error));
+recoveryEvents.on('recovery:succeeded', () => console.log('session renewed'));
+recoveryEvents.on('recovery:unavailable', ({ error }) => reportToSentry(error));
 
-client.use(refresh({ tokenProvider, refreshClient, events: httpEvents }));
+client.use(recover({ recover: renewSession, events: recoveryEvents }));
 ```
 
-`HttpEventBus` is **not a singleton** — create one per app (or per independent set of
-clients that should share session state) and pass it explicitly; nothing here reaches
+`EventBus` is **not a singleton** — create one per app (or per independent set of
+clients that should share recovery state) and pass it explicitly; nothing here reaches
 across unrelated `HttpClient` instances implicitly. `on()` returns an unsubscribe
 function, which composes naturally with a React `useEffect` cleanup. A throwing listener
 never prevents its siblings from running.
 
-| Event                  | Payload                | Fires                                                                                                                         |
-| ---------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `unauthorized`         | `{ error: HttpError }` | Once per request that can't refresh (`canRefresh()` false), and once per failed refresh cycle (never once per queued request) |
-| `token:refreshed`      | `{}`                   | Once per successful refresh cycle                                                                                             |
-| `token:refresh-failed` | `{ error: unknown }`   | Once per failed refresh cycle, before `unauthorized`                                                                          |
+| Event                  | Payload                | Fires                                                                         |
+| ---------------------- | ---------------------- | ----------------------------------------------------------------------------- |
+| `recovery:succeeded`   | `{}`                   | Once per successful recovery cycle, never once per queued request             |
+| `recovery:failed`      | `{ error: unknown }`   | Once per failed recovery cycle                                                |
+| `recovery:unavailable` | `{ error: HttpError }` | Once per request whose `canRecover()` check failed — recovery never attempted |
 
 ## Error handling
 
@@ -491,18 +595,24 @@ or cancellation — never a raw transport-specific error:
 
 ```ts
 class HttpError<T = unknown> extends Error {
-  code: 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR';
+  code: 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR' | 'UNKNOWN';
   status: number; // 0 when there is no HTTP response at all
   data?: T; // the parsed error response body, when there is one
   request: HttpRequest;
   response?: HttpResponse<T>;
-  cause?: unknown;
-  get isNetworkError(): boolean; // status === 0
+  cause?: unknown; // non-enumerable, matching native Error.cause
+  get isNetworkError(): boolean; // code === 'NETWORK_ERROR'
   get isCanceled(): boolean; // code === 'CANCELED'
   static is(error: unknown): error is HttpError;
   static from(error: unknown, request: HttpRequest): HttpError; // wraps anything else, passes an existing HttpError through unchanged
 }
 ```
+
+`HttpError.from()`'s fallback is `'UNKNOWN'`, not `'NETWORK_ERROR'` — it's used by
+`recover()`/`errorMapper()` on anything they catch that isn't already an `HttpError`,
+which normally only happens for a bug in a plugin between them and the adapter. Claiming
+`NETWORK_ERROR` for that would make `isNetworkError` lie and could get a real bug
+silently retried by `recover()`.
 
 ```ts
 try {
@@ -513,10 +623,6 @@ try {
   }
 }
 ```
-
-`errorMapper` reshapes an `HttpError` into your own domain error type, registered
-_outside_ `refresh`/`auth` (`PluginOrder.normalize`) so `refresh` always sees the raw
-`HttpError` — only errors that survive a refresh retry ever reach the mapper:
 
 ```ts
 import { errorMapper, HttpError } from '@lamstack/http-client';
@@ -593,7 +699,7 @@ cancel(); // rejects `promise` with an HttpError whose code is 'CANCELED'
 
 ## Writing your own plugin
 
-`auth`, `refresh`, and `errorMapper` are not privileged — they're written against the
+`auth`, `recover`, and `errorMapper` are not privileged — they're written against the
 exact same `Middleware`/`HttpPlugin` contract available to you. For example, a plugin
 that attaches a client-id header (the kind of extensibility a future SSE plugin would
 build on, without needing any change to core):
@@ -604,7 +710,7 @@ import type { HttpPlugin } from '@lamstack/http-client';
 function clientIdPlugin(clientId: string): HttpPlugin {
   return {
     name: 'client-id',
-    order: 50, // between refresh and auth — see PluginOrder
+    order: 50, // between recover and auth — see PluginOrder
     handler: async (request, next) => {
       return next({ ...request, headers: { ...request.headers, 'x-client-id': clientId } });
     },
@@ -668,17 +774,18 @@ const client = new HttpClient({ adapter: scriptedAdapter({ data: { id: '1' } }) 
 ```
 
 This is the same pattern this package's own test suite uses throughout — see
-`src/plugins/refresh.plugin.test.ts` for scripted-adapter and concurrency-testing
+`src/plugins/recover.plugin.test.ts` for scripted-adapter and concurrency-testing
 examples (the `deferred()`-promise pattern for controlling exactly when an in-flight
 request settles).
 
 ## TypeScript
 
 Every public type is exported from the package root (`HttpRequest`, `HttpResponse`,
-`HttpPlugin`, `TokenProvider`, ...). Generic type parameters flow through the whole
-chain: `client.get<User>('/me')` types the resolved value; `client.request<User>(init)`
-types `response.data`; `client.post<CreatedUser, CreateUserInput>('/users', input)` types
-both the body and the result.
+`HttpPlugin`, `Authenticator`, `TokenProvider`, `RecoveryContext`, ...). Generic type
+parameters flow through the whole chain: `client.get<User>('/me')` types the resolved
+value; `client.request<User>(init)` types `response.data`;
+`client.post<CreatedUser, CreateUserInput>('/users', input)` types both the body and the
+result.
 
 ## Roadmap
 
@@ -692,15 +799,19 @@ for the full rationale:
   honestly; this is where that flips to `true`.
 - **An SSE plugin** — the plugin system is already extensible enough for one (see
   [Writing your own plugin](#writing-your-own-plugin)); it just doesn't ship yet.
+- **`tokenSession()`/`TokenStore`** — a helper meant to eventually wrap the
+  `recover()`+`TokenProvider` wiring shown above into one call. Design still undecided;
+  `LocalStorageTokenProvider`/`CookieHttpOnlyTokenProvider` are the supported path today.
 
 ## Credits
 
 This package generalizes a production `HttpClient` implementation (axios-only) from an
 internal dashboard into an adapter-agnostic, publicly reusable one — see
 [SPEC.md §5](./SPEC.md#5-ported-behavior-parity-checklist-against-omnicomdashboardsrclibhttp-client)
-for the full parity checklist against that original implementation, including the two
+for the full parity checklist against that original implementation, including the
 deliberate behavior improvements made along the way (per-request error identity on a
-failed shared refresh, and `extend()` replacing a manually-constructed second client).
+failed shared recovery cycle, `extend()` replacing a manually-constructed second client,
+and the `Authenticator`/`recover()` split documented in SPEC.md §5.1).
 
 ## License
 

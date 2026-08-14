@@ -1,38 +1,28 @@
 import { PluginOrder } from '../core/types';
-import type { HttpPlugin } from '../core/types';
-import type { TokenProvider } from './token-provider';
+import type { Awaitable, HttpPlugin, HttpRequest } from '../core/types';
 
-export interface AuthPluginOptions {
-  /** Header to set the token on. Defaults to `'authorization'`. */
-  header?: string;
-  /** Prefix before the token value (e.g. `'Bearer'`). Pass `''` to set the raw token with no scheme. Defaults to `'Bearer'`. */
-  scheme?: string;
+/** Produces the outgoing request with credentials attached — a Bearer header, a signature, whatever the strategy needs. */
+export type Authenticator = (request: HttpRequest) => Awaitable<HttpRequest>;
+
+export interface AuthOptions {
+  /** Skip authentication for requests matching this predicate (e.g. a login endpoint). */
+  skip?: (request: HttpRequest) => boolean;
 }
 
 /**
- * Attaches the current access token to every outgoing request. Built entirely
- * on the public `TokenProvider` contract — holds no capability a
- * user-authored plugin couldn't replicate. Skips itself when a request's
- * `meta.auth` is explicitly `false`.
+ * Applies `authenticator` to every outgoing request. Deliberately thin: the
+ * plugin only knows "produce a request from a request" — everything about
+ * *how* (Bearer token, API key, request signing, several strategies
+ * combined) lives in the `Authenticator` itself. See `./authenticators.ts`
+ * for the built-in presets (`bearer`, `apiKey`, `basic`, `allOf`).
  */
-export function auth(provider: TokenProvider, options: AuthPluginOptions = {}): HttpPlugin {
-  const header = (options.header ?? 'authorization').toLowerCase();
-  const scheme = options.scheme ?? 'Bearer';
-
+export function auth(authenticator: Authenticator, options: AuthOptions = {}): HttpPlugin {
   return {
     name: 'auth',
     order: PluginOrder.auth,
     handler: async (request, next) => {
-      if (request.meta.auth === false) return next(request);
-
-      const decorated = provider.decorate ? provider.decorate(request) : request;
-      const token = await provider.getAccessToken();
-      if (!token) return next(decorated);
-
-      return next({
-        ...decorated,
-        headers: { ...decorated.headers, [header]: scheme ? `${scheme} ${token}` : token },
-      });
+      if (options.skip?.(request)) return next(request);
+      return next(await authenticator(request));
     },
   };
 }

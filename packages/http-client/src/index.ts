@@ -3,6 +3,7 @@ export type { ResolveDefaults } from './core/resolve';
 
 export { PluginOrder } from './core/types';
 export type {
+  Awaitable,
   HttpMethod,
   ResponseType,
   HttpHeaders,
@@ -24,29 +25,23 @@ export type { HttpClientOptions } from './core/client';
 export { HttpError } from './core/http-error';
 export type { HttpErrorCode, HttpErrorOptions } from './core/http-error';
 
-export { HttpEventBus } from './core/http-event-bus';
-export type { HttpEventMap } from './core/http-event-bus';
+export { EventBus } from './core/event-bus';
 
 export { cancelable } from './core/cancelable';
 
 export { auth } from './plugins/auth.plugin';
-export type { AuthPluginOptions } from './plugins/auth.plugin';
+export type { Authenticator, AuthOptions } from './plugins/auth.plugin';
 
-export { refresh } from './plugins/refresh.plugin';
-export type { RefreshPluginOptions } from './plugins/refresh.plugin';
+export { bearer, apiKey, basic, allOf } from './plugins/authenticators';
+export type { BearerOptions, BearerSource, ApiKeyOptions } from './plugins/authenticators';
+
+export { recover, onStatus } from './plugins/recover.plugin';
+export type { RecoverOptions, RecoveryContext, RecoveryEventMap } from './plugins/recover.plugin';
 
 export { errorMapper } from './plugins/error-mapper.plugin';
 
-export { defaultRefreshPolicy, defaultAccessTokenParser } from './plugins/token-provider';
-export type {
-  Awaitable,
-  TokenProvider,
-  RefreshPolicy,
-  RefreshPolicyContext,
-  DefaultRefreshPolicyOptions,
-  Storage,
-  AccessTokenParser,
-} from './plugins/token-provider';
+export { defaultAccessTokenParser } from './plugins/token-provider';
+export type { TokenProvider, Storage, AccessTokenParser } from './plugins/token-provider';
 
 export { LocalStorageTokenProvider } from './plugins/local-storage-token.provider';
 export type { LocalStorageTokenProviderOptions } from './plugins/local-storage-token.provider';

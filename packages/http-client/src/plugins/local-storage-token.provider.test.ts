@@ -3,8 +3,9 @@ import { HttpClient } from '../core/client';
 import { HttpError } from '../core/http-error';
 import type { HttpAdapter, HttpRequest, HttpResponse } from '../core/types';
 import { auth } from './auth.plugin';
+import { bearer } from './authenticators';
 import { LocalStorageTokenProvider } from './local-storage-token.provider';
-import { refresh } from './refresh.plugin';
+import { recover } from './recover.plugin';
 import type { Storage } from './token-provider';
 
 function fakeStorage(): Storage {
@@ -106,7 +107,7 @@ describe('LocalStorageTokenProvider', () => {
   });
 });
 
-describe('LocalStorageTokenProvider — end-to-end with auth + refresh plugins', () => {
+describe('LocalStorageTokenProvider — end-to-end with auth + recover plugins', () => {
   it('attaches the access token, and survives a 401 -> refresh -> retry cycle', async () => {
     const store = fakeStorage();
     const provider = new LocalStorageTokenProvider({ store, refreshUrl: '/auth/refresh' });
@@ -136,8 +137,15 @@ describe('LocalStorageTokenProvider — end-to-end with auth + refresh plugins',
     const refreshClient = new HttpClient({ adapter: refreshAdapter });
 
     const client = new HttpClient({ adapter: mainAdapter });
-    client.use(refresh({ tokenProvider: provider, refreshClient }));
-    client.use(auth(provider));
+    client.use(
+      recover({
+        recover: async () => {
+          const response = await refreshClient.request(await provider.buildRefreshRequest());
+          await provider.saveTokens(response.data);
+        },
+      }),
+    );
+    client.use(auth(bearer(provider)));
 
     const data = await client.get('/x');
 

@@ -10,8 +10,11 @@ type QueryValue = string | number | boolean | Date | null | undefined;
 
 export type QueryParams = Record<string, QueryValue | QueryValue[]>;
 
+/** A value, or a Promise of one — most plugin-facing callbacks accept either. */
+export type Awaitable<T> = T | Promise<T>;
+
 /**
- * Free-form bag for plugin behavior toggles (`auth`, `refresh`, `mapError`) and
+ * Free-form bag for plugin behavior toggles (`auth`, `recover`, `mapError`) and
  * consumer data. Plugin-internal state (e.g. a retry-attempt counter) must use a
  * `Symbol.for('lamstack.http.*')` key instead of a plain string, so it can never
  * collide with an entry a consumer put here themselves.
@@ -19,7 +22,7 @@ export type QueryParams = Record<string, QueryValue | QueryValue[]>;
 export interface HttpMeta {
   auth?: boolean;
   mapError?: boolean;
-  refresh?: boolean;
+  recover?: boolean;
   [key: string]: unknown;
   [key: symbol]: unknown;
 }

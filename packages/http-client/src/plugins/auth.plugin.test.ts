@@ -2,18 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fetchAdapter } from '../adapters/fetch.adapter';
 import { HttpClient } from '../core/client';
 import { auth } from './auth.plugin';
-import type { TokenProvider } from './token-provider';
-
-function stubProvider(overrides: Partial<TokenProvider> = {}): TokenProvider {
-  return {
-    getAccessToken: async () => null,
-    saveTokens: async () => {},
-    clear: async () => {},
-    canRefresh: async () => false,
-    buildRefreshRequest: async () => ({ url: '/refresh' }),
-    ...overrides,
-  };
-}
+import type { Authenticator } from './auth.plugin';
 
 function captureFetch() {
   const calls: { url: string; init: RequestInit }[] = [];
@@ -32,71 +21,57 @@ function headersOf(init: RequestInit): Record<string, string> {
 }
 
 describe('auth', () => {
-  it('attaches Authorization: Bearer <token> when the provider resolves a token', async () => {
+  it("applies the authenticator's returned request to the outgoing call", async () => {
     const { calls, fetchStub } = captureFetch();
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
-    client.use(auth(stubProvider({ getAccessToken: async () => 'tok123' })));
+    const authenticator: Authenticator = async (request) => ({
+      ...request,
+      headers: { ...request.headers, authorization: 'Bearer tok123' },
+    });
+    client.use(auth(authenticator));
 
     await client.get('/x');
 
     expect(headersOf(calls[0].init).authorization).toBe('Bearer tok123');
   });
 
-  it('leaves the header unset when getAccessToken() resolves null', async () => {
+  it('awaits an async authenticator before continuing', async () => {
     const { calls, fetchStub } = captureFetch();
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
-    client.use(auth(stubProvider({ getAccessToken: async () => null })));
+    const authenticator: Authenticator = (request) =>
+      new Promise((resolvePromise) =>
+        setTimeout(() => resolvePromise({ ...request, headers: { ...request.headers, 'x-delayed': 'yes' } }), 5),
+      );
+    client.use(auth(authenticator));
 
     await client.get('/x');
 
+    expect(headersOf(calls[0].init)['x-delayed']).toBe('yes');
+  });
+
+  it('skips the authenticator entirely when options.skip(request) is true', async () => {
+    const { calls, fetchStub } = captureFetch();
+    const authenticator = vi.fn<Authenticator>(async (request) => request);
+    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
+    client.use(auth(authenticator, { skip: (request) => request.url.includes('/public') }));
+
+    await client.get('/public/x');
+
+    expect(authenticator).not.toHaveBeenCalled();
     expect(headersOf(calls[0].init).authorization).toBeUndefined();
   });
 
-  it("applies provider.decorate() before attaching the auth header", async () => {
-    const { calls, fetchStub } = captureFetch();
+  it('does not skip requests that do not match options.skip', async () => {
+    const { fetchStub } = captureFetch();
+    const authenticator = vi.fn<Authenticator>(async (request) => ({
+      ...request,
+      headers: { ...request.headers, authorization: 'Bearer tok123' },
+    }));
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
-    client.use(
-      auth(
-        stubProvider({
-          getAccessToken: async () => 'tok123',
-          decorate: (request) => ({ ...request, headers: { ...request.headers, 'x-decorated': 'yes' } }),
-        }),
-      ),
-    );
+    client.use(auth(authenticator, { skip: (request) => request.url.includes('/public') }));
 
-    await client.get('/x');
+    await client.get('/private/x');
 
-    const headers = headersOf(calls[0].init);
-    expect(headers['x-decorated']).toBe('yes');
-    expect(headers.authorization).toBe('Bearer tok123');
-  });
-
-  it('skips entirely when meta.auth is false — no decorate call, no header', async () => {
-    const { calls, fetchStub } = captureFetch();
-    const decorate = vi.fn((request) => request);
-    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
-    client.use(auth(stubProvider({ getAccessToken: async () => 'tok123', decorate })));
-
-    await client.get('/x', { meta: { auth: false } });
-
-    expect(decorate).not.toHaveBeenCalled();
-    expect(headersOf(calls[0].init).authorization).toBeUndefined();
-  });
-
-  it('supports a custom header name and scheme', async () => {
-    const { calls, fetchStub } = captureFetch();
-    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
-    client.use(
-      auth(stubProvider({ getAccessToken: async () => 'tok123' }), {
-        header: 'x-api-key',
-        scheme: '',
-      }),
-    );
-
-    await client.get('/x');
-
-    const headers = headersOf(calls[0].init);
-    expect(headers['x-api-key']).toBe('tok123');
-    expect(headers.authorization).toBeUndefined();
+    expect(authenticator).toHaveBeenCalledTimes(1);
   });
 });

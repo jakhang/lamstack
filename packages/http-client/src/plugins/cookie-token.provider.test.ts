@@ -4,8 +4,9 @@ import { HttpError } from '../core/http-error';
 import { resolve } from '../core/resolve';
 import type { HttpAdapter, HttpRequest, HttpResponse } from '../core/types';
 import { auth } from './auth.plugin';
+import { bearer } from './authenticators';
 import { CookieHttpOnlyTokenProvider } from './cookie-token.provider';
-import { refresh } from './refresh.plugin';
+import { recover } from './recover.plugin';
 import type { Storage } from './token-provider';
 
 function fakeStorage(): Storage {
@@ -77,7 +78,7 @@ describe('CookieHttpOnlyTokenProvider', () => {
   });
 });
 
-describe('CookieHttpOnlyTokenProvider — end-to-end with auth + refresh plugins', () => {
+describe('CookieHttpOnlyTokenProvider — end-to-end with auth + recover plugins', () => {
   it('sends credentials: include on every request, and survives a 401 -> refresh -> retry cycle', async () => {
     const store = fakeStorage();
     const provider = new CookieHttpOnlyTokenProvider({ store, refreshUrl: '/auth/refresh' });
@@ -108,9 +109,18 @@ describe('CookieHttpOnlyTokenProvider — end-to-end with auth + refresh plugins
     };
     const refreshClient = new HttpClient({ adapter: refreshAdapter });
 
-    const client = new HttpClient({ adapter: mainAdapter });
-    client.use(refresh({ tokenProvider: provider, refreshClient }));
-    client.use(auth(provider));
+    // The new auth() plugin no longer calls provider.decorate() — a cookie-based strategy
+    // declares credentials: 'include' at the client level instead (SPEC v3 §3.3).
+    const client = new HttpClient({ adapter: mainAdapter, credentials: 'include' });
+    client.use(
+      recover({
+        recover: async () => {
+          const response = await refreshClient.request(await provider.buildRefreshRequest());
+          await provider.saveTokens(response.data);
+        },
+      }),
+    );
+    client.use(auth(bearer(provider)));
 
     const data = await client.get('/x');
 

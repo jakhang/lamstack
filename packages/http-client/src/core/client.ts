@@ -102,9 +102,10 @@ export class HttpClient {
    * A new, independent `HttpClient` inheriting the parent's options and the
    * plugins registered so far — a snapshot, not a live link. Registering a
    * plugin on either client afterward does not affect the other. Typically
-   * called early (before `use(auth(...))`/`use(refresh(...))`) to
-   * produce a `refreshClient` with no auth/refresh plugins attached, avoiding
-   * a recursive refresh loop.
+   * called early (before `use(auth(...))`/`use(recover(...))`) to produce a
+   * client with no auth/recovery plugins attached — typically the client a
+   * `recover()` callback uses internally to call the refresh endpoint,
+   * avoiding a recursive recovery loop.
    */
   extend(options: Partial<HttpClientOptions> = {}): HttpClient {
     return new HttpClient(

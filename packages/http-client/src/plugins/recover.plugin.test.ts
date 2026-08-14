@@ -1,23 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HttpClient } from '../core/client';
+import { EventBus } from '../core/event-bus';
 import { HttpError } from '../core/http-error';
-import { HttpEventBus } from '../core/http-event-bus';
 import { PluginOrder } from '../core/types';
 import type { HttpAdapter, HttpRequest, HttpResponse } from '../core/types';
 import { auth } from './auth.plugin';
-import { refresh } from './refresh.plugin';
-import { defaultRefreshPolicy } from './token-provider';
-import type { TokenProvider } from './token-provider';
+import { bearer } from './authenticators';
+import { onStatus, recover } from './recover.plugin';
+import type { RecoveryEventMap } from './recover.plugin';
 
-function stubProvider(overrides: Partial<TokenProvider> = {}): TokenProvider {
-  return {
-    getAccessToken: async () => 'old-token',
-    saveTokens: async () => {},
-    clear: async () => {},
-    canRefresh: async () => true,
-    buildRefreshRequest: async () => ({ url: '/refresh', method: 'POST' }),
-    ...overrides,
-  };
+function stubProvider(overrides: { getAccessToken?: () => Promise<string | null> } = {}) {
+  return { getAccessToken: overrides.getAccessToken ?? (async () => 'old-token') };
 }
 
 /** An adapter driven by a script — `unauthorized` throws a 401 HttpError, anything else is the response body. */
@@ -43,19 +36,27 @@ function scriptedAdapter(script: Array<'unauthorized' | Record<string, unknown>>
   return { adapter, calls };
 }
 
-describe('refresh — single refresh-and-retry', () => {
-  it('refreshes once on 401 and retries the original request, resolving with the retried response', async () => {
+describe('recover — single recovery-and-retry', () => {
+  it('recovers once on 401 and retries the original request, resolving with the retried response', async () => {
     const main = scriptedAdapter(['unauthorized', { ok: true }]);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
     const saveTokens = vi.fn(async () => {});
-    const events = new HttpEventBus();
-    const onTokenRefreshed = vi.fn();
-    events.on('token:refreshed', onTokenRefreshed);
+    const events = new EventBus<RecoveryEventMap>();
+    const onSucceeded = vi.fn();
+    events.on('recovery:succeeded', onSucceeded);
 
     const client = new HttpClient({ adapter: main.adapter });
-    client.use(refresh({ tokenProvider: stubProvider({ saveTokens }), refreshClient, events }));
-    client.use(auth(stubProvider()));
+    client.use(
+      recover({
+        recover: async () => {
+          const response = await refreshClient.request({ url: '/refresh', method: 'POST' });
+          await saveTokens(response.data);
+        },
+        events,
+      }),
+    );
+    client.use(auth(bearer(stubProvider())));
 
     const data = await client.get('/x');
 
@@ -63,27 +64,33 @@ describe('refresh — single refresh-and-retry', () => {
     expect(main.calls).toHaveLength(2);
     expect(refreshMock.calls).toHaveLength(1);
     expect(saveTokens).toHaveBeenCalledWith({ accessToken: 'new-token' });
-    expect(onTokenRefreshed).toHaveBeenCalledTimes(1);
-    expect(onTokenRefreshed).toHaveBeenCalledWith({});
+    expect(onSucceeded).toHaveBeenCalledTimes(1);
+    expect(onSucceeded).toHaveBeenCalledWith({});
   });
 
-  it("re-enters only the inner chain on retry: the auth middleware runs twice, refresh's own handler runs once", async () => {
+  it("re-enters only the inner chain on retry: the auth middleware runs twice, recover's own handler runs once", async () => {
     const main = scriptedAdapter(['unauthorized', { ok: true }]);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
 
-    let refreshInvocations = 0;
+    let recoverInvocations = 0;
     let authRuns = 0;
     const client = new HttpClient({ adapter: main.adapter });
     client.use({
-      name: 'count-refresh-plugin-invocations',
+      name: 'count-recover-plugin-invocations',
       order: PluginOrder.refresh - 1,
       handler: async (request, next) => {
-        refreshInvocations += 1;
+        recoverInvocations += 1;
         return next(request);
       },
     });
-    client.use(refresh({ tokenProvider: stubProvider(), refreshClient }));
+    client.use(
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+      }),
+    );
     client.use({
       name: 'count-inner-runs',
       order: PluginOrder.auth - 1,
@@ -92,25 +99,26 @@ describe('refresh — single refresh-and-retry', () => {
         return next(request);
       },
     });
-    client.use(auth(stubProvider()));
+    client.use(auth(bearer(stubProvider())));
 
     await client.get('/x');
 
-    expect(refreshInvocations).toBe(1);
+    expect(recoverInvocations).toBe(1);
     expect(authRuns).toBe(2);
   });
 
-  it('does not attempt a refresh for a request matching an excludePaths pattern (infinite-loop guard)', async () => {
+  it('does not attempt recovery for a request matching an excluded pattern (infinite-loop guard)', async () => {
     const main = scriptedAdapter(['unauthorized']);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
 
     const client = new HttpClient({ adapter: main.adapter });
     client.use(
-      refresh({
-        tokenProvider: stubProvider(),
-        refreshClient,
-        shouldRefresh: defaultRefreshPolicy({ excludePaths: ['/refresh'] }),
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+        shouldRecover: onStatus(401, { exclude: ['/refresh'] }),
       }),
     );
 
@@ -118,32 +126,44 @@ describe('refresh — single refresh-and-retry', () => {
     expect(refreshMock.calls).toHaveLength(0);
   });
 
-  it('maxAttempts (default 1) stops after one refresh — a second 401 on the retried request propagates as-is', async () => {
+  it('maxAttempts (default 1) stops after one recovery cycle — a second 401 on the retried request propagates as-is', async () => {
     const main = scriptedAdapter(['unauthorized', 'unauthorized']);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
 
     const client = new HttpClient({ adapter: main.adapter });
-    client.use(refresh({ tokenProvider: stubProvider(), refreshClient }));
+    client.use(
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+      }),
+    );
 
     await expect(client.get('/x')).rejects.toMatchObject({ code: 'HTTP_ERROR', status: 401 });
     expect(main.calls).toHaveLength(2);
     expect(refreshMock.calls).toHaveLength(1);
   });
 
-  it('a failing refresh call propagates the original error with the refresh failure attached via .cause, and does not hang', async () => {
+  it('a failing recovery call propagates the original error with the recovery failure attached via .cause, and does not hang', async () => {
     const main = scriptedAdapter(['unauthorized']);
     const refreshMock = scriptedAdapter(['unauthorized']);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
     const clear = vi.fn(async () => {});
-    const events = new HttpEventBus();
-    const onUnauthorized = vi.fn();
-    const onRefreshFailed = vi.fn();
-    events.on('unauthorized', onUnauthorized);
-    events.on('token:refresh-failed', onRefreshFailed);
+    const events = new EventBus<RecoveryEventMap>();
+    const onFailed = vi.fn();
+    events.on('recovery:failed', onFailed);
+    events.on('recovery:failed', () => clear());
 
     const client = new HttpClient({ adapter: main.adapter });
-    client.use(refresh({ tokenProvider: stubProvider({ clear }), refreshClient, events }));
+    client.use(
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+        events,
+      }),
+    );
 
     const error: unknown = await client.get('/x').catch((e: unknown) => e);
 
@@ -152,42 +172,53 @@ describe('refresh — single refresh-and-retry', () => {
     expect((error as HttpError).cause).toBeInstanceOf(HttpError);
     expect(((error as HttpError).cause as HttpError).status).toBe(401);
     expect(clear).toHaveBeenCalledTimes(1);
-    expect(onRefreshFailed).toHaveBeenCalledTimes(1);
-    expect(onUnauthorized).toHaveBeenCalledTimes(1);
-    expect(onUnauthorized.mock.calls[0][0].error).toBeInstanceOf(HttpError);
-    expect(onUnauthorized.mock.calls[0][0].error.status).toBe(401);
+    expect(onFailed).toHaveBeenCalledTimes(1);
   });
 
-  it('does not attempt a refresh when tokenProvider.canRefresh() resolves false, clears tokens, and emits unauthorized', async () => {
+  it('does not attempt recovery when canRecover() resolves false, and emits recovery:unavailable', async () => {
     const main = scriptedAdapter(['unauthorized']);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
     const clear = vi.fn(async () => {});
-    const events = new HttpEventBus();
-    const onUnauthorized = vi.fn();
-    events.on('unauthorized', onUnauthorized);
+    const events = new EventBus<RecoveryEventMap>();
+    const onUnavailable = vi.fn();
+    events.on('recovery:unavailable', onUnavailable);
+    events.on('recovery:unavailable', () => clear());
 
     const client = new HttpClient({ adapter: main.adapter });
     client.use(
-      refresh({ tokenProvider: stubProvider({ canRefresh: async () => false, clear }), refreshClient, events }),
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+        canRecover: async () => false,
+        events,
+      }),
     );
 
     await expect(client.get('/x')).rejects.toMatchObject({ status: 401 });
     expect(refreshMock.calls).toHaveLength(0);
     expect(clear).toHaveBeenCalledTimes(1);
-    expect(onUnauthorized).toHaveBeenCalledTimes(1);
-    expect(onUnauthorized.mock.calls[0][0].error).toBeInstanceOf(HttpError);
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
+    expect(onUnavailable.mock.calls[0][0].error).toBeInstanceOf(HttpError);
   });
 
-  it('skips refresh entirely when the request meta.refresh is false', async () => {
+  it('skips recovery entirely when the caller composes shouldRecover to honor meta.recover === false', async () => {
     const main = scriptedAdapter(['unauthorized']);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
 
     const client = new HttpClient({ adapter: main.adapter });
-    client.use(refresh({ tokenProvider: stubProvider(), refreshClient }));
+    client.use(
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+        shouldRecover: (context) => context.request.meta.recover !== false && onStatus(401)(context),
+      }),
+    );
 
-    await expect(client.get('/x', { meta: { refresh: false } })).rejects.toMatchObject({ status: 401 });
+    await expect(client.get('/x', { meta: { recover: false } })).rejects.toMatchObject({ status: 401 });
     expect(refreshMock.calls).toHaveLength(0);
   });
 });
@@ -223,8 +254,8 @@ function tokenAwareAdapter(currentValidToken: () => string): { adapter: HttpAdap
   return { adapter, calls };
 }
 
-/** A TokenProvider whose stored token can be read/written by the test, mimicking real persistence. */
-function mutableProvider(initialToken: string): TokenProvider & { token: string } {
+/** A bearer() source whose token can be read/written by the test, mimicking real persistence. */
+function mutableProvider(initialToken: string): { token: string; getAccessToken(): Promise<string> } {
   const state = { token: initialToken };
   return {
     get token() {
@@ -234,19 +265,11 @@ function mutableProvider(initialToken: string): TokenProvider & { token: string 
       state.token = value;
     },
     getAccessToken: async () => state.token,
-    saveTokens: async (payload) => {
-      state.token = (payload as { accessToken: string }).accessToken;
-    },
-    clear: async () => {
-      state.token = 'cleared';
-    },
-    canRefresh: async () => true,
-    buildRefreshRequest: async () => ({ url: '/refresh', method: 'POST' }),
   };
 }
 
-describe('refresh — concurrent request queueing', () => {
-  it('queues concurrent 401s behind a single in-flight refresh; all resolve once it completes', async () => {
+describe('recover — concurrent request queueing', () => {
+  it('queues concurrent 401s behind a single in-flight recovery cycle; all resolve once it completes', async () => {
     let validToken = 'fresh-token';
     const { adapter: mainAdapter, calls: mainCalls } = tokenAwareAdapter(() => validToken);
     const provider = mutableProvider('stale-token');
@@ -266,8 +289,15 @@ describe('refresh — concurrent request queueing', () => {
     const refreshClient = new HttpClient({ adapter: refreshAdapter });
 
     const client = new HttpClient({ adapter: mainAdapter });
-    client.use(refresh({ tokenProvider: provider, refreshClient }));
-    client.use(auth(provider));
+    client.use(
+      recover({
+        recover: async () => {
+          const response = await refreshClient.request({ url: '/refresh', method: 'POST' });
+          provider.token = (response.data as { accessToken: string }).accessToken;
+        },
+      }),
+    );
+    client.use(auth(bearer(provider)));
 
     const promises = [0, 1, 2, 3, 4].map((i) => client.get(`/x${i}`));
     await tick();
@@ -278,18 +308,18 @@ describe('refresh — concurrent request queueing', () => {
     const results = await Promise.all(promises);
     expect(results).toEqual([0, 1, 2, 3, 4].map(() => ({ ok: true })));
     expect(refreshCallCount).toBe(1);
-    // Every request retried after the shared refresh, never before — no partial 401 leaks through.
+    // Every request retried after the shared recovery, never before — no partial 401 leaks through.
     expect(mainCalls.filter((r) => r.headers.authorization === 'Bearer fresh-token')).toHaveLength(5);
   });
 
-  it('rejects each queued request with its own original error when the shared refresh fails, refreshing tokenProvider.clear() and emitting unauthorized only once', async () => {
+  it('rejects each queued request with its own original error when the shared recovery fails, and emits recovery:failed only once', async () => {
     const { adapter: mainAdapter } = tokenAwareAdapter(() => 'never-valid');
     const provider = mutableProvider('stale-token');
     const clear = vi.fn(async () => {});
-    provider.clear = clear;
-    const events = new HttpEventBus();
-    const onUnauthorized = vi.fn();
-    events.on('unauthorized', onUnauthorized);
+    const events = new EventBus<RecoveryEventMap>();
+    const onFailed = vi.fn();
+    events.on('recovery:failed', onFailed);
+    events.on('recovery:failed', () => clear());
 
     let refreshCallCount = 0;
     const refreshDone = deferred<void>();
@@ -305,8 +335,15 @@ describe('refresh — concurrent request queueing', () => {
     const refreshClient = new HttpClient({ adapter: refreshAdapter });
 
     const client = new HttpClient({ adapter: mainAdapter });
-    client.use(refresh({ tokenProvider: provider, refreshClient, events }));
-    client.use(auth(provider));
+    client.use(
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+        events,
+      }),
+    );
+    client.use(auth(bearer(provider)));
 
     const promises = [client.get('/a'), client.get('/b'), client.get('/c')].map((p) => p.catch((e: unknown) => e));
     await tick();
@@ -324,10 +361,10 @@ describe('refresh — concurrent request queueing', () => {
     // Each request got its own distinct HttpError, not a single shared rejection value.
     expect(new Set(errors).size).toBe(3);
     expect(clear).toHaveBeenCalledTimes(1);
-    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(onFailed).toHaveBeenCalledTimes(1);
   });
 
-  it('a later 401 after the previous refresh already resolved triggers a fresh refresh, not a stale queue', async () => {
+  it('a later 401 after the previous recovery already resolved triggers a fresh cycle, not a stale queue', async () => {
     let validToken = 'good-token-1';
     let refreshCallCount = 0;
     const { adapter: mainAdapter } = tokenAwareAdapter(() => validToken);
@@ -345,8 +382,15 @@ describe('refresh — concurrent request queueing', () => {
     const refreshClient = new HttpClient({ adapter: refreshAdapter });
 
     const client = new HttpClient({ adapter: mainAdapter });
-    client.use(refresh({ tokenProvider: provider, refreshClient }));
-    client.use(auth(provider));
+    client.use(
+      recover({
+        recover: async () => {
+          const response = await refreshClient.request({ url: '/refresh', method: 'POST' });
+          provider.token = (response.data as { accessToken: string }).accessToken;
+        },
+      }),
+    );
+    client.use(auth(bearer(provider)));
 
     await client.get('/first');
     expect(refreshCallCount).toBe(1);

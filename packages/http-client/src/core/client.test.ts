@@ -158,6 +158,38 @@ describe('HttpClient — extend()', () => {
 
     expect(seenUrl).toBe('https://b.com/api/users');
   });
+
+  it('cannot unset an inherited field by passing it as explicit undefined — `??` falls back to the parent value either way', async () => {
+    let seenUrl: string | undefined;
+    const parent = new HttpClient({
+      adapter: fakeAdapter((request) => {
+        seenUrl = request.url;
+        return { data: null };
+      }),
+      baseURL: 'https://a.com/api',
+    });
+    const child = parent.extend({ baseURL: undefined });
+
+    await child.get('/users');
+
+    expect(seenUrl).toBe('https://a.com/api/users');
+  });
+
+  it('replaces headers entirely rather than merging with the parent — passing any headers drops the parent’s own', async () => {
+    let seenHeaders: Record<string, string> | undefined;
+    const parent = new HttpClient({
+      adapter: fakeAdapter((request) => {
+        seenHeaders = request.headers as Record<string, string>;
+        return { data: null };
+      }),
+      headers: { 'x-parent': '1' },
+    });
+    const child = parent.extend({ headers: { 'x-child': '2' } });
+
+    await child.get('/x');
+
+    expect(seenHeaders).toEqual({ 'x-child': '2' });
+  });
 });
 
 describe('HttpClient — upload()', () => {

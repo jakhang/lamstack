@@ -106,6 +106,14 @@ export class HttpClient {
    * client with no auth/recovery plugins attached — typically the client a
    * `recover()` callback uses internally to call the refresh endpoint,
    * avoiding a recursive recovery loop.
+   *
+   * Every field falls back to the parent's value via `??`, which has two
+   * consequences: passing a field as explicit `undefined` does not unset
+   * it (there's no way to force a field back to "unset" from a parent that
+   * has one); and `headers` is replaced wholesale rather than merged —
+   * passing any `headers` here drops the parent's entirely, unlike a
+   * per-request `headers` override (see `resolve()`'s `mergeHeaders`),
+   * which layers on top instead of replacing.
    */
   extend(options: Partial<HttpClientOptions> = {}): HttpClient {
     return new HttpClient(

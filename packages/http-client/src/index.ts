@@ -17,6 +17,7 @@ export type {
   Middleware,
   HttpPlugin,
   HttpAdapter,
+  AdapterCapabilities,
 } from './core/types';
 
 export { HttpClient } from './core/client';

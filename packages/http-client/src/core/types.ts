@@ -99,12 +99,14 @@ export const PluginOrder = {
   transport: 200,
 } as const;
 
+export interface AdapterCapabilities {
+  uploadProgress: boolean;
+  downloadProgress: boolean;
+  stream: boolean;
+}
+
 export interface HttpAdapter {
   readonly name: string;
-  readonly capabilities: {
-    uploadProgress: boolean;
-    downloadProgress: boolean;
-    stream: boolean;
-  };
+  readonly capabilities: AdapterCapabilities;
   send<T = unknown>(request: HttpRequest): Promise<HttpResponse<T>>;
 }

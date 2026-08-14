@@ -41,7 +41,7 @@ describe('recover — single recovery-and-retry', () => {
     const main = scriptedAdapter(['unauthorized', { ok: true }]);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
-    const saveTokens = vi.fn(async () => {});
+    const saveTokens = vi.fn<(payload: unknown) => Promise<void>>(async () => {});
     const events = new EventBus<RecoveryEventMap>();
     const onSucceeded = vi.fn();
     events.on('recovery:succeeded', onSucceeded);

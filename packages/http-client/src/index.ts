@@ -50,6 +50,9 @@ export type { LocalStorageTokenProviderOptions } from './plugins/local-storage-t
 export { CookieHttpOnlyTokenProvider } from './plugins/cookie-token.provider';
 export type { CookieHttpOnlyTokenProviderOptions } from './plugins/cookie-token.provider';
 
+export { tokenSession } from './plugins/token-session';
+export type { TokenSession, TokenSessionOptions, TokenStore } from './plugins/token-session';
+
 export type { FileSerializer } from './serializers/file-serializer';
 export { WebFileSerializer } from './serializers/web-file.serializer';
 export { NativeFileSerializer } from './serializers/native-file.serializer';

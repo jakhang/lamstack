@@ -31,6 +31,15 @@ describe('HttpError', () => {
     expect(error.cause).toBe(cause);
   });
 
+  it('.cause is non-enumerable, matching native Error.cause — it must not leak into JSON.stringify/spread/Object.keys', () => {
+    const cause = new Error('ECONNREFUSED');
+    const error = new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
+
+    expect(Object.getOwnPropertyDescriptor(error, 'cause')?.enumerable).toBe(false);
+    expect(Object.keys(error)).not.toContain('cause');
+    expect(JSON.stringify({ ...error })).not.toContain('ECONNREFUSED');
+  });
+
   it('HttpError.is() narrows unknown to HttpError', () => {
     const error: unknown = new HttpError('x', { code: 'HTTP_ERROR', status: 500, request });
     expect(HttpError.is(error)).toBe(true);

@@ -18,12 +18,15 @@ export interface HttpErrorOptions<T> {
  * resolves only for a 2xx response; every other outcome rejects with one of these.
  */
 export class HttpError<T = unknown> extends Error {
+  // Declared, not assigned: `Error`'s own `cause` (set below via defineProperty, matching
+  // its native non-enumerable behavior) already provides the runtime value — this only
+  // types it, since the project's ES2020 lib target predates ES2022's Error.cause typings.
+  declare readonly cause?: unknown;
   readonly code: HttpErrorCode;
   readonly status: number;
   readonly data?: T;
   readonly request: HttpRequest;
   readonly response?: HttpResponse<T>;
-  readonly cause?: unknown;
 
   constructor(message: string, options: HttpErrorOptions<T>) {
     super(message);
@@ -33,7 +36,9 @@ export class HttpError<T = unknown> extends Error {
     this.data = options.data;
     this.request = options.request;
     this.response = options.response;
-    this.cause = options.cause;
+    // Non-enumerable, matching native `new Error(message, { cause })` — a plain `this.cause =`
+    // assignment would make it enumerable, leaking into JSON.stringify/spread/Object.keys.
+    Object.defineProperty(this, 'cause', { value: options.cause, enumerable: false, configurable: true });
     Object.setPrototypeOf(this, HttpError.prototype);
   }
 

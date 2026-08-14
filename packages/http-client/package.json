@@ -59,6 +59,16 @@
     },
     "./package.json": "./package.json"
   },
+  "typesVersions": {
+    "*": {
+      "adapters/fetch": [
+        "./dist/adapters/fetch.d.ts"
+      ],
+      "adapters/axios": [
+        "./dist/adapters/axios.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist"
   ],

@@ -15,9 +15,13 @@ describe('HttpError', () => {
     expect(error.message).toBe('Not Found');
   });
 
-  it('isNetworkError is true only when status is 0', () => {
+  it('isNetworkError is true only when code is NETWORK_ERROR — not just because status is 0', () => {
     expect(new HttpError('x', { code: 'NETWORK_ERROR', status: 0, request }).isNetworkError).toBe(true);
     expect(new HttpError('x', { code: 'HTTP_ERROR', status: 404, request }).isNetworkError).toBe(false);
+    // CANCELED, TIMEOUT, and UNKNOWN also carry status: 0 — none of them are network errors.
+    expect(new HttpError('x', { code: 'CANCELED', status: 0, request }).isNetworkError).toBe(false);
+    expect(new HttpError('x', { code: 'TIMEOUT', status: 0, request }).isNetworkError).toBe(false);
+    expect(new HttpError('x', { code: 'UNKNOWN', status: 0, request }).isNetworkError).toBe(false);
   });
 
   it('isCanceled is true only when code is CANCELED', () => {
@@ -60,11 +64,12 @@ describe('HttpError', () => {
       expect(error.cause).toBe(abortError);
     });
 
-    it('wraps any other thrown value as a NETWORK_ERROR HttpError', () => {
-      const cause = new Error('getaddrinfo ENOTFOUND');
+    it('wraps an unrecognized thrown value as an UNKNOWN HttpError, not a network error — recover()/errorMapper() call this on anything they catch, including a bug in user middleware', () => {
+      const cause = new Error('something a plugin threw that has nothing to do with the network');
       const error = HttpError.from(cause, request);
-      expect(error.code).toBe('NETWORK_ERROR');
+      expect(error.code).toBe('UNKNOWN');
       expect(error.status).toBe(0);
+      expect(error.isNetworkError).toBe(false);
       expect(error.cause).toBe(cause);
     });
   });

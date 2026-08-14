@@ -1,6 +1,6 @@
 import type { HttpRequest, HttpResponse } from './types';
 
-export type HttpErrorCode = 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR';
+export type HttpErrorCode = 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR' | 'UNKNOWN';
 
 export interface HttpErrorOptions<T> {
   code: HttpErrorCode;
@@ -43,7 +43,7 @@ export class HttpError<T = unknown> extends Error {
   }
 
   get isNetworkError(): boolean {
-    return this.status === 0;
+    return this.code === 'NETWORK_ERROR';
   }
 
   get isCanceled(): boolean {
@@ -54,13 +54,21 @@ export class HttpError<T = unknown> extends Error {
     return error instanceof HttpError;
   }
 
-  /** Wraps an arbitrary thrown value into an `HttpError`, passing an existing one through unchanged. */
+  /**
+   * Wraps an arbitrary thrown value into an `HttpError`, passing an existing one through
+   * unchanged. A compliant `HttpAdapter` only ever throws `HttpError` itself (see the class
+   * doc above), so the fallback branch here only fires for something that reached `recover()`/
+   * `errorMapper()` *without* going through an adapter — typically a bug in a plugin between
+   * them and the adapter. `code: 'UNKNOWN'` reflects that honestly: it is not a network error,
+   * and claiming otherwise would make `isNetworkError` lie and could get a real bug silently
+   * retried by `recover()`.
+   */
   static from(error: unknown, request: HttpRequest): HttpError {
     if (HttpError.is(error)) return error;
     if (error instanceof Error && error.name === 'AbortError') {
       return new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause: error });
     }
     const message = error instanceof Error ? error.message : String(error);
-    return new HttpError(message, { code: 'NETWORK_ERROR', status: 0, request, cause: error });
+    return new HttpError(message, { code: 'UNKNOWN', status: 0, request, cause: error });
   }
 }

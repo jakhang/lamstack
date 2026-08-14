@@ -93,7 +93,7 @@ export interface HttpPlugin {
 export const PluginOrder = {
   observe: -200,
   normalize: -100,
-  refresh: 0,
+  recover: 0,
   retry: 50,
   auth: 100,
   transport: 200,

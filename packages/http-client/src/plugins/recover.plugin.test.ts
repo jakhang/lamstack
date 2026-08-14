@@ -78,7 +78,7 @@ describe('recover — single recovery-and-retry', () => {
     const client = new HttpClient({ adapter: main.adapter });
     client.use({
       name: 'count-recover-plugin-invocations',
-      order: PluginOrder.refresh - 1,
+      order: PluginOrder.recover - 1,
       handler: async (request, next) => {
         recoverInvocations += 1;
         return next(request);
@@ -400,5 +400,70 @@ describe('recover — concurrent request queueing', () => {
 
     await client.get('/second');
     expect(refreshCallCount).toBe(2);
+  });
+});
+
+describe('recover — stale generation after an unrelated rotation', () => {
+  it("a request dispatched before another request's recovery cycle completes retries once with the new credential instead of starting a redundant cycle", async () => {
+    // The server already considers token-0 invalid from the start — both A and B's initial
+    // attempts fail with it, independently of each other.
+    let validToken = 'token-1';
+    const { adapter: tokenCheckingAdapter } = tokenAwareAdapter(() => validToken);
+    const provider = mutableProvider('token-0');
+
+    let refreshCallCount = 0;
+    const refreshAdapter: HttpAdapter = {
+      name: 'refresh',
+      capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+      async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+        refreshCallCount += 1;
+        validToken = 'token-1';
+        return { status: 200, statusText: 'OK', headers: {}, request, data: { accessToken: 'token-1' } as T };
+      },
+    };
+    const refreshClient = new HttpClient({ adapter: refreshAdapter });
+
+    // request A's underlying send() only "comes back" (with a 401, carrying the now-stale
+    // token-0) once told to — simulating it having been dispatched well before B's own
+    // recovery cycle ran and completed.
+    const aResponds = deferred<void>();
+    let aAttempts = 0;
+    const slowAdapter: HttpAdapter = {
+      name: 'slow',
+      capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+      async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+        if (request.url === '/a') {
+          aAttempts += 1;
+          if (aAttempts === 1) await aResponds.promise;
+        }
+        return tokenCheckingAdapter.send<T>(request);
+      },
+    };
+
+    const client = new HttpClient({ adapter: slowAdapter });
+    client.use(
+      recover({
+        recover: async () => {
+          const response = await refreshClient.request({ url: '/refresh', method: 'POST' });
+          provider.token = (response.data as { accessToken: string }).accessToken;
+        },
+      }),
+    );
+    client.use(auth(bearer(provider)));
+
+    const aPromise = client.get('/a'); // hangs on its first attempt, still carrying token-0
+
+    // B triggers and completes a full recovery cycle while A is still waiting on its first attempt.
+    await client.get('/b');
+    expect(refreshCallCount).toBe(1);
+    expect(validToken).toBe('token-1');
+
+    // Now let A's stale attempt finally fail (token-0 no longer matches token-1).
+    aResponds.resolve();
+    await aPromise;
+
+    // A should have retried directly with token-1 picked up via auth(), not triggered a second cycle.
+    expect(refreshCallCount).toBe(1);
+    expect(aAttempts).toBe(2);
   });
 });

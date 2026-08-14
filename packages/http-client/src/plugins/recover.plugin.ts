@@ -4,6 +4,7 @@ import type { Awaitable, HttpPlugin, HttpRequest } from '../core/types';
 import type { EventBus } from '../core/event-bus';
 
 const ATTEMPT = Symbol.for('lamstack.http.recoveryAttempt');
+const GENERATION = Symbol.for('lamstack.http.recoveryGeneration');
 
 export interface RecoveryContext {
   error: HttpError;
@@ -57,6 +58,10 @@ function getAttempt(request: HttpRequest): number {
   return (request.meta[ATTEMPT] as number | undefined) ?? 0;
 }
 
+function getGeneration(request: HttpRequest): number {
+  return (request.meta[GENERATION] as number | undefined) ?? 0;
+}
+
 function withCause(error: HttpError, cause: unknown): HttpError {
   return new HttpError(error.message, {
     code: error.code,
@@ -81,18 +86,27 @@ function withCause(error: HttpError, cause: unknown): HttpError {
  * one attempt (scoped to this plugin instance) rather than each triggering
  * their own — but each still rejects with its own original error on failure,
  * not a value shared across every queued request.
+ *
+ * A request dispatched before some *other* request's cycle completes can still
+ * fail afterward, carrying the credential that cycle just rotated away from.
+ * A generation counter (bumped each time a cycle succeeds) detects this: if a
+ * request's failure is caught with an older generation than the current one,
+ * a rotation already happened without it, so it retries directly through
+ * `next()` instead of starting a redundant cycle.
  */
 export function recover(options: RecoverOptions): HttpPlugin {
   const { recover: runRecovery, canRecover, maxAttempts = 1, events } = options;
   const shouldRecover = options.shouldRecover ?? onStatus(401);
 
   let inFlight: Promise<void> | null = null;
+  let generation = 0;
 
   function runOnce(context: RecoveryContext): Promise<void> {
     if (!inFlight) {
       inFlight = (async () => {
         try {
           await runRecovery(context);
+          generation += 1;
           events?.emit('recovery:succeeded', {});
         } catch (error) {
           events?.emit('recovery:failed', { error });
@@ -107,9 +121,9 @@ export function recover(options: RecoverOptions): HttpPlugin {
 
   return {
     name: 'recover',
-    order: options.order ?? PluginOrder.refresh,
+    order: options.order ?? PluginOrder.recover,
     handler: async (request, next) => {
-      let current = request;
+      let current: HttpRequest = { ...request, meta: { ...request.meta, [GENERATION]: generation } };
 
       while (true) {
         try {
@@ -123,18 +137,24 @@ export function recover(options: RecoverOptions): HttpPlugin {
           const context: RecoveryContext = { error, request: current, attempt };
           if (!(await shouldRecover(context))) throw error;
 
-          if (canRecover && !(await canRecover())) {
-            events?.emit('recovery:unavailable', { error });
-            throw error;
-          }
+          const stale = getGeneration(current) < generation;
 
-          try {
-            await runOnce(context);
-          } catch (recoveryError) {
-            throw withCause(error, recoveryError);
-          }
+          if (!stale) {
+            if (canRecover && !(await canRecover())) {
+              events?.emit('recovery:unavailable', { error });
+              throw error;
+            }
 
-          current = { ...current, meta: { ...current.meta, [ATTEMPT]: attempt + 1 } };
+            try {
+              await runOnce(context);
+            } catch (recoveryError) {
+              throw withCause(error, recoveryError);
+            }
+          }
+          // else: a different request's cycle already rotated the credential since this
+          // one was dispatched — skip straight to retrying with it, no redundant cycle.
+
+          current = { ...current, meta: { ...current.meta, [ATTEMPT]: attempt + 1, [GENERATION]: generation } };
         }
       }
     },

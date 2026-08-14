@@ -42,10 +42,10 @@ class JsonParseFailure extends Error {
   }
 }
 
-function parseBody(responseType: ResponseType, raw: unknown): unknown {
+function parseBody(responseType: ResponseType, raw: unknown, contentType?: string): unknown {
   switch (responseType) {
     case 'blob':
-      return new Blob([raw as ArrayBuffer]);
+      return new Blob([raw as ArrayBuffer], contentType ? { type: contentType } : undefined);
     case 'arrayBuffer':
     case 'stream':
       return raw;
@@ -96,9 +96,10 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
       }
 
       const ok = axiosResponse.status >= 200 && axiosResponse.status < 300;
+      const headers = normalizeHeaders(axiosResponse.headers);
       let data: unknown;
       try {
-        data = parseBody(request.responseType, axiosResponse.data);
+        data = parseBody(request.responseType, axiosResponse.data, headers['content-type']);
       } catch (cause) {
         if (!ok && cause instanceof JsonParseFailure) {
           data = cause.rawText;
@@ -116,7 +117,7 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
         data: data as T,
         status: axiosResponse.status,
         statusText: axiosResponse.statusText,
-        headers: normalizeHeaders(axiosResponse.headers),
+        headers,
         request,
         raw: axiosResponse,
       };

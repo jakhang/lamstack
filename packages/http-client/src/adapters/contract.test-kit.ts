@@ -189,6 +189,11 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
       expect((response.data as Blob).size).toBe(4);
     });
 
+    it("responseType: 'blob' preserves the response's Content-Type on the Blob", async () => {
+      const response = await adapter.send(req({ url: '/blob', responseType: 'blob' }));
+      expect((response.data as Blob).type).toBe('application/octet-stream');
+    });
+
     it('sends a binary body as raw bytes, not JSON-stringified', async () => {
       const response = await adapter.send(
         req({ url: '/echo-body', method: 'POST', body: new Uint8Array([1, 2, 3]), responseType: 'arrayBuffer' }),

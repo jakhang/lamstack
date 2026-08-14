@@ -57,13 +57,16 @@ export default defineConfig([
   {
     // @lamstack/http-client's core/plugins/serializers must not import axios directly —
     // only adapters/axios.adapter(.test).ts (exempted below) may.
-    files: ['packages/http/src/**/*.{ts,tsx}'],
+    files: ['packages/http-client/src/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': ['error', { paths: ['axios'] }],
     },
   },
   {
-    files: ['packages/http/src/adapters/axios.adapter.ts', 'packages/http/src/adapters/axios.adapter.test.ts'],
+    files: [
+      'packages/http-client/src/adapters/axios.adapter.ts',
+      'packages/http-client/src/adapters/axios.adapter.test.ts',
+    ],
     rules: {
       'no-restricted-imports': 'off',
     },

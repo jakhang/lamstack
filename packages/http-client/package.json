@@ -1,6 +1,6 @@
 {
   "name": "@lamstack/http-client",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Framework-agnostic HTTP client core with a pluggable middleware pipeline — no hard dependency on axios or fetch.",
   "keywords": [
     "http",
@@ -16,7 +16,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jakhang/lamstack.git",
-    "directory": "packages/http"
+    "directory": "packages/http-client"
   },
   "bugs": {
     "url": "https://github.com/jakhang/lamstack/issues"
@@ -70,7 +70,7 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.nodom.json"
   },
   "devDependencies": {
     "axios": "^1.7.9"

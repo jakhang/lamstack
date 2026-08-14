@@ -139,7 +139,7 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3
 
-  packages/http:
+  packages/http-client:
     devDependencies:
       axios:
         specifier: ^1.7.9

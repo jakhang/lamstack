@@ -36,6 +36,7 @@ on top via a single `.use()` API. No plugin shipped with this package — not `a
     - [Built-in authenticators](#built-in-authenticators)
     - [`recover`](#recover)
     - [The `TokenProvider` contract and built-in strategies](#the-tokenprovider-contract-and-built-in-strategies)
+    - [`tokenSession()` — a lower-level session primitive](#tokensession--a-lower-level-session-primitive)
     - [Recovery events (`EventBus`)](#recovery-events-eventbus)
   - [Error handling](#error-handling)
   - [File uploads](#file-uploads)
@@ -548,10 +549,40 @@ Nothing above is special-cased — a third strategy (e.g. a multi-tenant token s
 one backed by a secure OS keychain) implements the same shape and works with
 `auth(bearer(...))`/`recover(...)` exactly the same way.
 
-> **Note:** a `tokenSession()`/`TokenStore` helper meant to eventually wrap the
-> `recover`+`TokenProvider` wiring above into one call is sketched in the redesign this
-> section is based on, but its exact shape is still undecided — not implemented yet.
-> `LocalStorageTokenProvider`/`CookieHttpOnlyTokenProvider` are the supported path today.
+### `tokenSession()` — a lower-level session primitive
+
+`tokenSession()` wraps a plain storage object and a renewal callback into the
+`TokenSession` contract `bearer()`/`recover()` are built on — a second, lower-level way
+to wire the same pattern `TokenProvider` above provides, not a replacement for it:
+
+```ts
+import { tokenSession } from '@lamstack/http-client';
+
+// TokenStore is the same getItem/setItem/removeItem shape as Storage above —
+// window.localStorage, AsyncStorage, or a Map wrapper all qualify.
+const session = tokenSession({
+  store: window.localStorage,
+  client: refreshClient, // the session owns this client — see extend() above
+  renew: async (client, store) => {
+    const refreshToken = await store.getItem('refresh_token');
+    const response = await client.post<{ accessToken: string }>('/auth/refresh', { refreshToken });
+    await store.setItem('access_token', response.accessToken);
+  },
+  accessTokenKey: 'access_token', // default
+  canRenew: async (store) => Boolean(await store.getItem('refresh_token')), // optional — omit for "always attempt renewal"
+});
+
+client.use(recover({ recover: () => session.renew(), canRecover: () => session.canRenew() }));
+client.use(auth(bearer(session)));
+
+recoveryEvents.on('recovery:failed', () => session.end());
+```
+
+`session.getAccessToken()` satisfies `bearer()`'s source contract directly. `renew` is
+fully generic — an HTTP call is the common case, but `firebaseUser.getIdToken(true)`, an
+OS keychain refresh, or a `BroadcastChannel` resync all fit the same shape. `end()` isn't
+called automatically on a failed cycle (same reasoning as `TokenProvider.clear()` above)
+— wire it through `recoveryEvents` yourself.
 
 ### Recovery events (`EventBus`)
 
@@ -799,9 +830,10 @@ for the full rationale:
   honestly; this is where that flips to `true`.
 - **An SSE plugin** — the plugin system is already extensible enough for one (see
   [Writing your own plugin](#writing-your-own-plugin)); it just doesn't ship yet.
-- **`tokenSession()`/`TokenStore`** — a helper meant to eventually wrap the
-  `recover()`+`TokenProvider` wiring shown above into one call. Design still undecided;
-  `LocalStorageTokenProvider`/`CookieHttpOnlyTokenProvider` are the supported path today.
+- **A "renew preset"** wrapping the common `buildRefreshRequest`/`saveTokens`/parser
+  pattern into a one-line [`tokenSession()`](#tokensession--a-lower-level-session-primitive)
+  config — `tokenSession()`/`TokenStore` itself ships today; only this convenience wrapper
+  around the common case doesn't yet.
 
 ## Credits
 

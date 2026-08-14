@@ -45,11 +45,6 @@ migrating `omni.com/dashboard` off its local `http-client` onto this package.
   framework-target prefix and avoiding an empty placeholder package.
 - No React-specific bindings (no `@lamstack/react-http`) — out of scope until a concrete
   React-only need exists.
-- **`tokenSession()`/`TokenStore`** (the session layer meant to eventually replace
-  `LocalStorageTokenProvider`/`CookieHttpOnlyTokenProvider`, see §5) — genuinely
-  underspecified as of v3; deferred pending a concrete design rather than invented ad hoc.
-  `TokenProvider` and both shipped strategies are unchanged and still exported in the
-  meantime — see §5.
 
 ## 2. Core Contracts
 
@@ -343,7 +338,7 @@ responseType: 'stream' throws a clear error, since capabilities.stream is false
 | Request interceptor (bearer header)                                                | `auth(bearer(source))` at `PluginOrder.auth` — see §5.1                                                                                                                                                                                                                                                                             |
 | Response interceptor (401 → refresh → queue → retry)                               | `recover(options)` at `PluginOrder.recover`, using re-entrant `next()` instead of `dispatch()` — see §5.1                                                                                                                                                                                                                           |
 | `TokenProvider` interface                                                          | Unchanged as of v3 — still exported, still the shape both shipped strategies implement; see §5.1 for how it now plugs into `auth()`/`recover()`                                                                                                                                                                                     |
-| `LocalStorageTokenProvider`, `CookieHttpOnlyTokenProvider`                         | Unchanged as of v3 (§5.1) — `tokenSession()`/`TokenStore`, meant to eventually replace both, is deferred (§1)                                                                                                                                                                                                                       |
+| `LocalStorageTokenProvider`, `CookieHttpOnlyTokenProvider`                         | Unchanged as of v3, still fully supported (§5.1) — `tokenSession()`/`TokenStore` is a second, lower-level session-layer primitive alongside them, not a replacement                                                                                                                                                                 |
 | `DefaultTokenRefreshPolicy`                                                        | `onStatus(401, { exclude? })` — same 401-only + excluded-paths behavior, now `recover()`'s `shouldRecover` default instead of a `TokenProvider`-coupled policy type                                                                                                                                                                 |
 | `isRefreshing` + `failedQueue`                                                     | Same algorithm inside `recover()`'s closure, plus a generation counter (§5.1) so a request that fails after a _different_ request's cycle already rotated the credential retries directly instead of starting a redundant cycle; each queued request still rejects with its own original error, refresh error attached via `.cause` |
 | `HttpEventBus` ('unauthorized'/'forbidden')                                        | Generic `EventBus<TMap>` (§5.1) — `recover()` defines its own `RecoveryEventMap` (`recovery:succeeded`/`recovery:failed`/`recovery:unavailable`); core no longer knows about tokens at the type level                                                                                                                               |
@@ -361,23 +356,26 @@ v3 splits this into two narrow, independent contracts; `TokenProvider` and both 
 strategies are unchanged and still slot into the new plugins directly, since
 `TokenProvider.getAccessToken()` alone satisfies `bearer()`'s source contract.
 
-| v2                                                                                        | v3                                                                                                                                                                                                                                                                                                |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auth(provider, { header, scheme })`                                                      | `auth(bearer(source, { header, scheme }))` — `Authenticator = (req) => Awaitable<HttpRequest>`; presets: `bearer`, `apiKey`, `basic`, `allOf`                                                                                                                                                     |
-| `TokenProvider.decorate` (called by `auth` before the header)                             | Deleted from the call path — `auth()` no longer calls it. A cookie strategy sets `credentials: 'include'` on `HttpClientOptions` instead (was a real bug in v2: `decorate` ran _after_ the `meta.auth === false` skip check, so an opted-out request also silently lost `credentials: 'include'`) |
-| `refresh({ tokenProvider, refreshClient, shouldRefresh, ... })`                           | `recover({ recover, canRecover?, shouldRecover?, maxAttempts?, events? })` — `recover: (context) => Promise<void>` is the only required contract; the callback decides how renewal happens (an HTTP request, `firebaseUser.getIdToken(true)`, a BroadcastChannel resync, ...)                     |
-| `defaultRefreshPolicy({ statuses?, excludePaths? })`                                      | `onStatus(status, { exclude? })` — `recover()`'s `shouldRecover` default                                                                                                                                                                                                                          |
-| `HttpMeta.refresh`                                                                        | `HttpMeta.recover` — neither this nor `HttpMeta.auth` is read automatically anymore; a per-request opt-out is composed into `shouldRecover`/`options.skip` yourself (§2.5)                                                                                                                        |
-| `refresh` plugin auto-calling `tokenProvider.clear()` on failure/`canRefresh() === false` | `recover()` calls no cleanup itself — it only emits `recovery:failed`/`recovery:unavailable`; the consumer wires `events.on('recovery:failed', () => provider.clear())`                                                                                                                           |
-| `HttpEventBus` (`unauthorized`/`token:refreshed`/`token:refresh-failed`)                  | `EventBus<RecoveryEventMap>` (`recovery:succeeded`/`recovery:failed`/`recovery:unavailable`) — no `unauthorized` event; `recovery:unavailable` covers the old `canRefresh() === false` case                                                                                                       |
-| (new in v3) redundant cycle for a stale in-flight request                                 | A generation counter in `recover()`: bumped each time a cycle succeeds; a request whose failure is caught with an older generation than current retries directly via `next()` instead of starting another cycle                                                                                   |
+| v2                                                                                                | v3                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth(provider, { header, scheme })`                                                              | `auth(bearer(source, { header, scheme }))` — `Authenticator = (req) => Awaitable<HttpRequest>`; presets: `bearer`, `apiKey`, `basic`, `allOf`                                                                                                                                                                                                                                                        |
+| `TokenProvider.decorate` (called by `auth` before the header)                                     | Deleted from the call path — `auth()` no longer calls it. A cookie strategy sets `credentials: 'include'` on `HttpClientOptions` instead (was a real bug in v2: `decorate` ran _after_ the `meta.auth === false` skip check, so an opted-out request also silently lost `credentials: 'include'`)                                                                                                    |
+| `refresh({ tokenProvider, refreshClient, shouldRefresh, ... })`                                   | `recover({ recover, canRecover?, shouldRecover?, maxAttempts?, events? })` — `recover: (context) => Promise<void>` is the only required contract; the callback decides how renewal happens (an HTTP request, `firebaseUser.getIdToken(true)`, a BroadcastChannel resync, ...)                                                                                                                        |
+| `defaultRefreshPolicy({ statuses?, excludePaths? })`                                              | `onStatus(status, { exclude? })` — `recover()`'s `shouldRecover` default                                                                                                                                                                                                                                                                                                                             |
+| `HttpMeta.refresh`                                                                                | `HttpMeta.recover` — neither this nor `HttpMeta.auth` is read automatically anymore; a per-request opt-out is composed into `shouldRecover`/`options.skip` yourself (§2.5)                                                                                                                                                                                                                           |
+| `refresh` plugin auto-calling `tokenProvider.clear()` on failure/`canRefresh() === false`         | `recover()` calls no cleanup itself — it only emits `recovery:failed`/`recovery:unavailable`; the consumer wires `events.on('recovery:failed', () => provider.clear())`                                                                                                                                                                                                                              |
+| `HttpEventBus` (`unauthorized`/`token:refreshed`/`token:refresh-failed`)                          | `EventBus<RecoveryEventMap>` (`recovery:succeeded`/`recovery:failed`/`recovery:unavailable`) — no `unauthorized` event; `recovery:unavailable` covers the old `canRefresh() === false` case                                                                                                                                                                                                          |
+| (new in v3) redundant cycle for a stale in-flight request                                         | A generation counter in `recover()`: bumped each time a cycle succeeds; a request whose failure is caught with an older generation than current retries directly via `next()` instead of starting another cycle                                                                                                                                                                                      |
+| `TokenProvider.buildRefreshRequest` + `saveTokens` + `canRefresh` + `clear` (session-layer usage) | `tokenSession({ store, client, renew })` — `TokenSession { getAccessToken, renew, canRenew, end }`. Its `getAccessToken()` alone satisfies `bearer()`'s source contract; `renew`/`canRenew` map directly to `recover()`'s `recover`/`canRecover` options; `end()` is wired the same way `provider.clear()` was — via `events.on('recovery:failed', () => session.end())`, never called automatically |
 
-**Deferred, not implemented:** `tokenSession()`/`TokenStore` — the session layer sketched
-as the eventual replacement for `LocalStorageTokenProvider`/`CookieHttpOnlyTokenProvider`.
-Its exact shape (key naming, `canRenew` default, what `TokenStore` looks like beyond "a
-`Storage`-like thing") is underspecified and needs a decision before implementing, not an
-invented one. Both shipped `TokenProvider` strategies remain fully supported via
-`auth(bearer(provider))` in the meantime.
+`tokenSession()`/`TokenStore` (§3.5) is implemented as of v3 — see `plugins/token-session.ts`.
+It's a second, lower-level way to wire the same `recover()` + credential-source pattern
+`TokenProvider` already provides, not a required migration off it: both
+`LocalStorageTokenProvider` and `CookieHttpOnlyTokenProvider` remain fully supported via
+`auth(bearer(provider))`. A "renew preset" wrapping the common
+`buildRefreshRequest`/`saveTokens`/`defaultAccessTokenParser` pattern into a one-line
+`tokenSession()` config (mentioned as a possibility in §3.9's migration map) is not built —
+today `renew` is written by hand per the pattern shown in the README.
 
 ## 6. Commands
 
@@ -417,6 +415,7 @@ packages/http-client/
       token-provider.ts                  # TokenProvider interface (unchanged, §5.1)
       local-storage-token.provider.ts
       cookie-token.provider.ts
+      token-session.ts                     # tokenSession()/TokenStore/TokenSession (§3.5, §5.1)
     serializers/
       file-serializer.ts
       web-file.serializer.ts
@@ -522,8 +521,9 @@ Verified the same way as `packages/initializer`'s boundary rule: intentionally i
 - Adding a new subpath export, a new first-party plugin beyond
   `auth`/`recover`/`error-mapper`, or starting v1.1 (`retryPlugin`, progress) work.
 - Creating any additional `@lamstack/*` package.
-- Implementing `tokenSession()`/`TokenStore` (§1, §5.1) — the shape needs a decision
-  first, not an invented one.
+- Removing or deprecating `TokenProvider`/`LocalStorageTokenProvider`/
+  `CookieHttpOnlyTokenProvider` in favor of `tokenSession()` — the latter is additive,
+  not a signal the former are going away.
 
 **Never do:**
 
@@ -545,6 +545,6 @@ Verified the same way as `packages/initializer`'s boundary rule: intentionally i
   (`'throw' | 'warn' | 'ignore'`).
 - SSE plugin (deferred since the original interview — architecture must support it,
   implementation does not exist).
-- `tokenSession()`/`TokenStore` (§1, §5.1) — deferred pending a concrete design, not a
-  scope decision like the items above; `LocalStorageTokenProvider`/
-  `CookieHttpOnlyTokenProvider` remain the supported path until it lands.
+- A "renew preset" wrapping the common `buildRefreshRequest`/`saveTokens`/
+  `defaultAccessTokenParser` pattern into a one-line `tokenSession()` config (§5.1) —
+  `tokenSession()`/`TokenStore` itself is implemented; only this convenience wrapper isn't.

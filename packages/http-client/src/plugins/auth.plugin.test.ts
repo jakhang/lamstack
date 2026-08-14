@@ -40,7 +40,10 @@ describe('auth', () => {
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
     const authenticator: Authenticator = (request) =>
       new Promise((resolvePromise) =>
-        setTimeout(() => resolvePromise({ ...request, headers: { ...request.headers, 'x-delayed': 'yes' } }), 5),
+        setTimeout(
+          () => resolvePromise({ ...request, headers: { ...request.headers, 'x-delayed': 'yes' } }),
+          5,
+        ),
       );
     client.use(auth(authenticator));
 

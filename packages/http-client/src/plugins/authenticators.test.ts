@@ -22,7 +22,10 @@ describe('bearer', () => {
   });
 
   it('supports a custom header name and an empty scheme', async () => {
-    const authenticator = bearer({ getAccessToken: async () => 'tok123' }, { header: 'x-api-key', scheme: '' });
+    const authenticator = bearer(
+      { getAccessToken: async () => 'tok123' },
+      { header: 'x-api-key', scheme: '' },
+    );
     const request = await authenticator(resolve({ url: '/x' }));
     expect(request.headers['x-api-key']).toBe('tok123');
     expect(request.headers.authorization).toBeUndefined();
@@ -37,7 +40,11 @@ describe('apiKey', () => {
   });
 
   it('attaches a dynamically-resolved key as a header', async () => {
-    const authenticator = apiKey({ in: 'header', name: 'x-api-key', value: async () => 'dynamic-secret' });
+    const authenticator = apiKey({
+      in: 'header',
+      name: 'x-api-key',
+      value: async () => 'dynamic-secret',
+    });
     const request = await authenticator(resolve({ url: '/x' }));
     expect(request.headers['x-api-key']).toBe('dynamic-secret');
   });
@@ -73,7 +80,10 @@ describe('allOf', () => {
   it('applies each authenticator in order, each seeing the previous one’s output', async () => {
     const authenticator = allOf(
       async (request) => ({ ...request, headers: { ...request.headers, 'x-first': 'a' } }),
-      async (request) => ({ ...request, headers: { ...request.headers, 'x-second': request.headers['x-first'] } }),
+      async (request) => ({
+        ...request,
+        headers: { ...request.headers, 'x-second': request.headers['x-first'] },
+      }),
     );
 
     const request = await authenticator(resolve({ url: '/x' }));

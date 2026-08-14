@@ -8,7 +8,11 @@ interface NativeFile {
 }
 
 function isNativeFile(value: unknown): value is NativeFile {
-  return typeof value === 'object' && value !== null && typeof (value as { uri?: unknown }).uri === 'string';
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { uri?: unknown }).uri === 'string'
+  );
 }
 
 /**

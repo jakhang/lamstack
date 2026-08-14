@@ -23,7 +23,10 @@ function fakeStorage(): Storage {
 
 describe('LocalStorageTokenProvider', () => {
   it('getAccessToken() returns null before any token is saved', async () => {
-    const provider = new LocalStorageTokenProvider({ store: fakeStorage(), refreshUrl: '/refresh' });
+    const provider = new LocalStorageTokenProvider({
+      store: fakeStorage(),
+      refreshUrl: '/refresh',
+    });
     expect(await provider.getAccessToken()).toBeNull();
   });
 
@@ -35,19 +38,28 @@ describe('LocalStorageTokenProvider', () => {
   });
 
   it('saveTokens() parses the { accessToken } response shape', async () => {
-    const provider = new LocalStorageTokenProvider({ store: fakeStorage(), refreshUrl: '/refresh' });
+    const provider = new LocalStorageTokenProvider({
+      store: fakeStorage(),
+      refreshUrl: '/refresh',
+    });
     await provider.saveTokens({ accessToken: 'a1' });
     expect(await provider.getAccessToken()).toBe('a1');
   });
 
   it('saveTokens() parses the { data: { accessToken } } response shape', async () => {
-    const provider = new LocalStorageTokenProvider({ store: fakeStorage(), refreshUrl: '/refresh' });
+    const provider = new LocalStorageTokenProvider({
+      store: fakeStorage(),
+      refreshUrl: '/refresh',
+    });
     await provider.saveTokens({ data: { accessToken: 'a1' } });
     expect(await provider.getAccessToken()).toBe('a1');
   });
 
   it('saveTokens() parses the { access_token } response shape', async () => {
-    const provider = new LocalStorageTokenProvider({ store: fakeStorage(), refreshUrl: '/refresh' });
+    const provider = new LocalStorageTokenProvider({
+      store: fakeStorage(),
+      refreshUrl: '/refresh',
+    });
     await provider.saveTokens({ access_token: 'a1' });
     expect(await provider.getAccessToken()).toBe('a1');
   });
@@ -131,7 +143,13 @@ describe('LocalStorageTokenProvider — end-to-end with auth + recover plugins',
       async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
         expect(request.url).toBe('/auth/refresh');
         expect((request.body as { refreshToken: string }).refreshToken).toBe('r1');
-        return { status: 200, statusText: 'OK', headers: {}, request, data: { accessToken: 'new-token' } as T };
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          request,
+          data: { accessToken: 'new-token' } as T,
+        };
       },
     };
     const refreshClient = new HttpClient({ adapter: refreshAdapter });

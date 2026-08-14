@@ -214,11 +214,14 @@ describe('recover — single recovery-and-retry', () => {
         recover: async () => {
           await refreshClient.request({ url: '/refresh', method: 'POST' });
         },
-        shouldRecover: (context) => context.request.meta.recover !== false && onStatus(401)(context),
+        shouldRecover: (context) =>
+          context.request.meta.recover !== false && onStatus(401)(context),
       }),
     );
 
-    await expect(client.get('/x', { meta: { recover: false } })).rejects.toMatchObject({ status: 401 });
+    await expect(client.get('/x', { meta: { recover: false } })).rejects.toMatchObject({
+      status: 401,
+    });
     expect(refreshMock.calls).toHaveLength(0);
   });
 });
@@ -238,7 +241,10 @@ function tick(): Promise<void> {
 }
 
 /** A token-aware main adapter: succeeds only when the Authorization header matches `currentValidToken()`. */
-function tokenAwareAdapter(currentValidToken: () => string): { adapter: HttpAdapter; calls: HttpRequest[] } {
+function tokenAwareAdapter(currentValidToken: () => string): {
+  adapter: HttpAdapter;
+  calls: HttpRequest[];
+} {
   const calls: HttpRequest[] = [];
   const adapter: HttpAdapter = {
     name: 'token-aware',
@@ -255,7 +261,10 @@ function tokenAwareAdapter(currentValidToken: () => string): { adapter: HttpAdap
 }
 
 /** A bearer() source whose token can be read/written by the test, mimicking real persistence. */
-function mutableProvider(initialToken: string): { token: string; getAccessToken(): Promise<string> } {
+function mutableProvider(initialToken: string): {
+  token: string;
+  getAccessToken(): Promise<string>;
+} {
   const state = { token: initialToken };
   return {
     get token() {
@@ -283,7 +292,13 @@ describe('recover — concurrent request queueing', () => {
         refreshCallCount += 1;
         await refreshDone.promise;
         validToken = 'fresh-token';
-        return { status: 200, statusText: 'OK', headers: {}, request, data: { accessToken: 'fresh-token' } as T };
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          request,
+          data: { accessToken: 'fresh-token' } as T,
+        };
       },
     };
     const refreshClient = new HttpClient({ adapter: refreshAdapter });
@@ -309,7 +324,9 @@ describe('recover — concurrent request queueing', () => {
     expect(results).toEqual([0, 1, 2, 3, 4].map(() => ({ ok: true })));
     expect(refreshCallCount).toBe(1);
     // Every request retried after the shared recovery, never before — no partial 401 leaks through.
-    expect(mainCalls.filter((r) => r.headers.authorization === 'Bearer fresh-token')).toHaveLength(5);
+    expect(mainCalls.filter((r) => r.headers.authorization === 'Bearer fresh-token')).toHaveLength(
+      5,
+    );
   });
 
   it('rejects each queued request with its own original error when the shared recovery fails, and emits recovery:failed only once', async () => {
@@ -345,7 +362,9 @@ describe('recover — concurrent request queueing', () => {
     );
     client.use(auth(bearer(provider)));
 
-    const promises = [client.get('/a'), client.get('/b'), client.get('/c')].map((p) => p.catch((e: unknown) => e));
+    const promises = [client.get('/a'), client.get('/b'), client.get('/c')].map((p) =>
+      p.catch((e: unknown) => e),
+    );
     await tick();
 
     expect(refreshCallCount).toBe(1);
@@ -418,7 +437,13 @@ describe('recover — stale generation after an unrelated rotation', () => {
       async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
         refreshCallCount += 1;
         validToken = 'token-1';
-        return { status: 200, statusText: 'OK', headers: {}, request, data: { accessToken: 'token-1' } as T };
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          request,
+          data: { accessToken: 'token-1' } as T,
+        };
       },
     };
     const refreshClient = new HttpClient({ adapter: refreshAdapter });

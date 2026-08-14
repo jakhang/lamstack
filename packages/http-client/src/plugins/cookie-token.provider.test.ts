@@ -24,7 +24,10 @@ function fakeStorage(): Storage {
 
 describe('CookieHttpOnlyTokenProvider', () => {
   it('getAccessToken() returns null before sign-in', async () => {
-    const provider = new CookieHttpOnlyTokenProvider({ store: fakeStorage(), refreshUrl: '/refresh' });
+    const provider = new CookieHttpOnlyTokenProvider({
+      store: fakeStorage(),
+      refreshUrl: '/refresh',
+    });
     expect(await provider.getAccessToken()).toBeNull();
   });
 
@@ -65,13 +68,19 @@ describe('CookieHttpOnlyTokenProvider', () => {
   });
 
   it('buildRefreshRequest() is a credentialed GET with no body', async () => {
-    const provider = new CookieHttpOnlyTokenProvider({ store: fakeStorage(), refreshUrl: '/auth/refresh' });
+    const provider = new CookieHttpOnlyTokenProvider({
+      store: fakeStorage(),
+      refreshUrl: '/auth/refresh',
+    });
     const init = await provider.buildRefreshRequest();
     expect(init).toEqual({ url: '/auth/refresh', method: 'GET', credentials: 'include' });
   });
 
   it('decorate() sets credentials: include on every request', () => {
-    const provider = new CookieHttpOnlyTokenProvider({ store: fakeStorage(), refreshUrl: '/refresh' });
+    const provider = new CookieHttpOnlyTokenProvider({
+      store: fakeStorage(),
+      refreshUrl: '/refresh',
+    });
     const request = resolve({ url: '/x' });
     const decorated = provider.decorate!(request);
     expect(decorated.credentials).toBe('include');
@@ -104,7 +113,13 @@ describe('CookieHttpOnlyTokenProvider — end-to-end with auth + recover plugins
         expect(request.url).toBe('/auth/refresh');
         expect(request.method).toBe('GET');
         expect(request.credentials).toBe('include');
-        return { status: 200, statusText: 'OK', headers: {}, request, data: { accessToken: 'new-token' } as T };
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          request,
+          data: { accessToken: 'new-token' } as T,
+        };
       },
     };
     const refreshClient = new HttpClient({ adapter: refreshAdapter });

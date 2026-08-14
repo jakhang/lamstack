@@ -3,7 +3,7 @@
 **Status:** v2 — supersedes the v1 draft. Architecture incorporates a redesign that fixed
 a real bug in v1 (`dispatch()` re-entering the pipeline from the top would have run
 outer middleware twice on every retry) and formalizes plugin ordering, the
-request/response contract, and the adapter contract. **v1 *scope* stays deliberately
+request/response contract, and the adapter contract. **v1 _scope_ stays deliberately
 lean** per this session's interview — `retryPlugin` and progress capabilities
 (`onUploadProgress`/`onDownloadProgress`) are architected for (reserved `PluginOrder.retry`
 slot, `AdapterCapabilities` shape) but **not implemented** until v1.1. Everything in this
@@ -27,6 +27,7 @@ works identically on an axios instance or on native `fetch`.
 migrating `omni.com/dashboard` off its local `http-client` onto this package.
 
 **Non-goals (v1):**
+
 - No SSE plugin implementation — only the extensibility (plugin system + arbitrary
   header/meta control) to add one later.
 - **No `retryPlugin`** (v1.1) — `PluginOrder.retry` is reserved in the constant table so
@@ -67,12 +68,12 @@ export interface HttpRequestInit<TBody = unknown> {
 }
 
 export interface HttpRequest<TBody = unknown> {
-  readonly url: string;              // absolute, params already serialized
-  readonly method: HttpMethod;       // uppercase
-  readonly headers: HttpHeaders;     // lowercase keys, fully merged
+  readonly url: string; // absolute, params already serialized
+  readonly method: HttpMethod; // uppercase
+  readonly headers: HttpHeaders; // lowercase keys, fully merged
   readonly body?: TBody;
   readonly signal?: AbortSignal;
-  readonly timeout: number;          // 0 = unlimited
+  readonly timeout: number; // 0 = unlimited
   readonly credentials: 'omit' | 'same-origin' | 'include';
   readonly responseType: ResponseType;
   readonly meta: HttpMeta;
@@ -88,19 +89,19 @@ type QueryValue = string | number | boolean | Date | null | undefined;
 
 **Resolution rules — each is a public contract and gets a dedicated test:**
 
-| Rule | Behavior |
-| --- | --- |
-| `baseURL` | `new URL(url, baseURL)` |
-| Absolute URL | An absolute `http(s)` URL ignores `baseURL` entirely |
-| Slash handling | `https://a.com/api` + `users` → `https://a.com/api/users` |
-| Header precedence | adapter defaults ← client headers ← request headers |
-| Header deletion | `null`/`undefined` at a later layer removes the previous value |
-| Header case | All keys normalized to lowercase |
-| Header collision | Keys equal after lowercasing overwrite earlier values |
-| Params | `null`/`undefined` values omitted |
-| Array params | Repeat the key: `id=1&id=2` |
-| Date params | Serialized as ISO strings |
-| Existing query | `/x?a=1` + `{ b: 2 }` → `/x?a=1&b=2` |
+| Rule              | Behavior                                                       |
+| ----------------- | -------------------------------------------------------------- |
+| `baseURL`         | `new URL(url, baseURL)`                                        |
+| Absolute URL      | An absolute `http(s)` URL ignores `baseURL` entirely           |
+| Slash handling    | `https://a.com/api` + `users` → `https://a.com/api/users`      |
+| Header precedence | adapter defaults ← client headers ← request headers            |
+| Header deletion   | `null`/`undefined` at a later layer removes the previous value |
+| Header case       | All keys normalized to lowercase                               |
+| Header collision  | Keys equal after lowercasing overwrite earlier values          |
+| Params            | `null`/`undefined` values omitted                              |
+| Array params      | Repeat the key: `id=1&id=2`                                    |
+| Date params       | Serialized as ISO strings                                      |
+| Existing query    | `/x?a=1` + `{ b: 2 }` → `/x?a=1&b=2`                           |
 
 ### 2.2 Response and Error
 
@@ -120,7 +121,7 @@ export type HttpErrorCode = 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCEL
 export class HttpError<T = unknown> extends Error {
   readonly name = 'HttpError';
   readonly code: HttpErrorCode;
-  readonly status: number;          // 0 when there is no HTTP response
+  readonly status: number; // 0 when there is no HTTP response
   readonly data?: T;
   readonly request: HttpRequest;
   readonly response?: HttpResponse<T>;
@@ -134,7 +135,7 @@ export class HttpError<T = unknown> extends Error {
 
 `HttpError` lives in **core**, not an adapter or plugin — it is part of the adapter
 contract. `send()` resolves only for 2xx; everything else rejects with `HttpError` using
-the correct code. The axios adapter overrides `validateStatus: () => true` on a *copy* of
+the correct code. The axios adapter overrides `validateStatus: () => true` on a _copy_ of
 the caller's axios config so the adapter (not the user's axios instance defaults)
 controls status interpretation.
 
@@ -153,11 +154,12 @@ from the top ran outer middleware (e.g. an observability plugin) twice per retry
 ```
 observe → refresh → auth → transport
 ```
+
 If `refresh` calls `next(req)` a second time, only `auth → transport` re-run; `observe`
 and `refresh` itself each ran exactly once. **This must be an explicit test**, not just
 an architectural claim.
 
-Any middleware placed *inside* a retrying middleware must be safe to run more than once
+Any middleware placed _inside_ a retrying middleware must be safe to run more than once
 per logical request — documented prominently in the README.
 
 ### 2.4 Plugin Ordering (public API)
@@ -174,7 +176,7 @@ export const PluginOrder = {
   observe: -200,
   normalize: -100,
   refresh: 0,
-  retry: 50,     // reserved for v1.1's retryPlugin — no plugin uses this slot in v1
+  retry: 50, // reserved for v1.1's retryPlugin — no plugin uses this slot in v1
   auth: 100,
   transport: 200,
 } as const;
@@ -189,9 +191,9 @@ insert between built-in layers.
 
 ```ts
 export interface HttpMeta {
-  auth?: boolean;      // false → authPlugin skips this request
-  mapError?: boolean;  // false → errorMapperPlugin leaves the error untouched
-  refresh?: boolean;   // false → refreshPlugin will not attempt refresh
+  auth?: boolean; // false → authPlugin skips this request
+  mapError?: boolean; // false → errorMapperPlugin leaves the error untouched
+  refresh?: boolean; // false → refreshPlugin will not attempt refresh
   [key: string]: unknown;
 }
 ```
@@ -223,11 +225,27 @@ export class HttpClient {
   get<T>(url: string, init?: Omit<HttpRequestInit, 'url' | 'method' | 'body'>): Promise<T>;
   delete<T>(url: string, init?: Omit<HttpRequestInit, 'url' | 'method' | 'body'>): Promise<T>;
   head(url: string, init?: Omit<HttpRequestInit, 'url' | 'method' | 'body'>): Promise<HttpHeaders>;
-  post<T, B = unknown>(url: string, body?: B, init?: Omit<HttpRequestInit, 'url' | 'method' | 'body'>): Promise<T>;
-  put<T, B = unknown>(url: string, body?: B, init?: Omit<HttpRequestInit, 'url' | 'method' | 'body'>): Promise<T>;
-  patch<T, B = unknown>(url: string, body?: B, init?: Omit<HttpRequestInit, 'url' | 'method' | 'body'>): Promise<T>;
+  post<T, B = unknown>(
+    url: string,
+    body?: B,
+    init?: Omit<HttpRequestInit, 'url' | 'method' | 'body'>,
+  ): Promise<T>;
+  put<T, B = unknown>(
+    url: string,
+    body?: B,
+    init?: Omit<HttpRequestInit, 'url' | 'method' | 'body'>,
+  ): Promise<T>;
+  patch<T, B = unknown>(
+    url: string,
+    body?: B,
+    init?: Omit<HttpRequestInit, 'url' | 'method' | 'body'>,
+  ): Promise<T>;
 
-  upload<T>(url: string, data: Record<string, unknown> | FormData, init?: HttpRequestInit): Promise<T>;
+  upload<T>(
+    url: string,
+    data: Record<string, unknown> | FormData,
+    init?: HttpRequestInit,
+  ): Promise<T>;
   download(url: string, init?: HttpRequestInit): Promise<Blob>;
 
   /** New client inheriting the parent's middleware/options — used to build a refresh-only client with no auth/refresh plugins attached. */
@@ -256,7 +274,7 @@ export interface AdapterCapabilities {
 
 export interface HttpAdapter {
   readonly name: string;
-  readonly capabilities: AdapterCapabilities;  // v1: both adapters report all-false
+  readonly capabilities: AdapterCapabilities; // v1: both adapters report all-false
   send<T>(req: HttpRequest): Promise<HttpResponse<T>>;
 }
 
@@ -280,21 +298,21 @@ invalid JSON · lowercase response headers · responseType: blob
 
 ## 5. Ported Behavior (parity checklist against `omni.com/dashboard/src/lib/http-client`)
 
-| Old (axios-only) | New (adapter-agnostic) |
-| --- | --- |
-| `HttpClient` (get/post/put/delete/patch/upload/download/createCancelable) | `HttpClient` core class + standalone `cancelable()` helper |
-| Request interceptor (bearer header) | `authPlugin(tokenProvider)` at `PluginOrder.auth` |
-| Response interceptor (401 → refresh → queue → retry) | `refreshPlugin(options)` at `PluginOrder.refresh`, using re-entrant `next()` instead of `dispatch()` |
-| `TokenProvider` interface | Same contract, renamed: `bearer`→`getAccessToken`, `persist`→`saveTokens`, `refreshable`→`canRefresh`, `configure`→`decorate`, `prepareRefresh`→`buildRefreshRequest` |
-| `LocalStorageTokenProvider`, `CookieHttpOnlyTokenProvider` | Ported with renamed methods — already storage-agnostic via `Storage`, no axios coupling to remove |
-| `DefaultTokenRefreshPolicy` | `defaultRefreshPolicy({ statuses?, excludePaths? })`, same 401-only + excluded-paths behavior |
-| `isRefreshing` + `failedQueue` | Same algorithm inside `refreshPlugin`'s closure; **on refresh failure, each queued request now rejects with its own original error**, with the refresh error attached via `.cause` (improvement over the old code, which rejected every queued request with the same refresh error) |
-| `HttpEventBus` ('unauthorized'/'forbidden') | Typed `HttpEventBus` + `HttpEventMap` (`unauthorized`, `token:refreshed`, `token:refresh-failed`) |
-| `HttpError` (status/code/data, `isNetworkError`) | Ported into core as part of the adapter contract, `+isCanceled`, `.cause`, `HttpError.is()`/`.from()` |
-| `ErrorNormalizer`/`ErrorHandler` | `errorMapperPlugin(map)` — maps server error payloads only; transport-level normalization is now the adapter's job (§2.2), not the plugin's |
-| `FormBuilder` + `FileSerializer` + `WebFileSerializer`/`ReactNativeFileSerializer` | Ported as-is into `serializers/` — pure Web API, no axios coupling |
-| `createCancelable` | `cancelable()` standalone helper (§3) |
-| (new) separate `authClient` to avoid interceptor loops | `client.extend({...})` producing a client with no auth/refresh plugins, passed as `refreshPlugin`'s `refreshClient` |
+| Old (axios-only)                                                                   | New (adapter-agnostic)                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HttpClient` (get/post/put/delete/patch/upload/download/createCancelable)          | `HttpClient` core class + standalone `cancelable()` helper                                                                                                                                                                                                                          |
+| Request interceptor (bearer header)                                                | `authPlugin(tokenProvider)` at `PluginOrder.auth`                                                                                                                                                                                                                                   |
+| Response interceptor (401 → refresh → queue → retry)                               | `refreshPlugin(options)` at `PluginOrder.refresh`, using re-entrant `next()` instead of `dispatch()`                                                                                                                                                                                |
+| `TokenProvider` interface                                                          | Same contract, renamed: `bearer`→`getAccessToken`, `persist`→`saveTokens`, `refreshable`→`canRefresh`, `configure`→`decorate`, `prepareRefresh`→`buildRefreshRequest`                                                                                                               |
+| `LocalStorageTokenProvider`, `CookieHttpOnlyTokenProvider`                         | Ported with renamed methods — already storage-agnostic via `Storage`, no axios coupling to remove                                                                                                                                                                                   |
+| `DefaultTokenRefreshPolicy`                                                        | `defaultRefreshPolicy({ statuses?, excludePaths? })`, same 401-only + excluded-paths behavior                                                                                                                                                                                       |
+| `isRefreshing` + `failedQueue`                                                     | Same algorithm inside `refreshPlugin`'s closure; **on refresh failure, each queued request now rejects with its own original error**, with the refresh error attached via `.cause` (improvement over the old code, which rejected every queued request with the same refresh error) |
+| `HttpEventBus` ('unauthorized'/'forbidden')                                        | Typed `HttpEventBus` + `HttpEventMap` (`unauthorized`, `token:refreshed`, `token:refresh-failed`)                                                                                                                                                                                   |
+| `HttpError` (status/code/data, `isNetworkError`)                                   | Ported into core as part of the adapter contract, `+isCanceled`, `.cause`, `HttpError.is()`/`.from()`                                                                                                                                                                               |
+| `ErrorNormalizer`/`ErrorHandler`                                                   | `errorMapperPlugin(map)` — maps server error payloads only; transport-level normalization is now the adapter's job (§2.2), not the plugin's                                                                                                                                         |
+| `FormBuilder` + `FileSerializer` + `WebFileSerializer`/`ReactNativeFileSerializer` | Ported as-is into `serializers/` — pure Web API, no axios coupling                                                                                                                                                                                                                  |
+| `createCancelable`                                                                 | `cancelable()` standalone helper (§3)                                                                                                                                                                                                                                               |
+| (new) separate `authClient` to avoid interceptor loops                             | `client.extend({...})` producing a client with no auth/refresh plugins, passed as `refreshPlugin`'s `refreshClient`                                                                                                                                                                 |
 
 ## 6. Commands
 
@@ -405,6 +423,7 @@ Verified the same way as `packages/initializer`'s boundary rule: intentionally i
 ## 10. Boundaries
 
 **Always do:**
+
 - Keep `packages/http/src/index.ts` (and everything under `core/`, `plugins/`,
   `serializers/`) free of any `axios`/`fetch`-specific import — enforced by §8's lint
   rule and §9's `tsconfig.nodom.json` check, not just review.
@@ -416,6 +435,7 @@ Verified the same way as `packages/initializer`'s boundary rule: intentionally i
   but honestly inert in v1 — don't half-implement retry/progress.
 
 **Ask first about:**
+
 - Any change to `HttpRequest`/`Middleware`/`HttpAdapter`/`PluginOrder` once this ships
   `1.0.0` — these are the contract every plugin and adapter is built against.
 - Adding a new subpath export, a new first-party plugin beyond
@@ -423,6 +443,7 @@ Verified the same way as `packages/initializer`'s boundary rule: intentionally i
 - Creating any additional `@lamstack/*` package.
 
 **Never do:**
+
 - Never add `axios` or a `fetch` polyfill as a non-optional dependency of the package
   root / `core`.
 - Never special-case the built-in `auth`/`refresh` plugins in `HttpClient` internals in a

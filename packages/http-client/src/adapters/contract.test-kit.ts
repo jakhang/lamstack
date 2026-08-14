@@ -134,7 +134,9 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
     });
 
     it('500 + HTML body throws HttpError', async () => {
-      await expect(adapter.send(req({ url: '/server-error', responseType: 'text' }))).rejects.toMatchObject({
+      await expect(
+        adapter.send(req({ url: '/server-error', responseType: 'text' })),
+      ).rejects.toMatchObject({
         code: 'HTTP_ERROR',
         status: 500,
       });
@@ -154,7 +156,10 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
     it('network error (nothing listening) throws a NETWORK_ERROR HttpError with status 0', async () => {
       const deadAdapter = makeAdapter();
       const request = resolve({ url: '/x' }, { baseURL: `http://127.0.0.1:${deadPort}` });
-      await expect(deadAdapter.send(request)).rejects.toMatchObject({ code: 'NETWORK_ERROR', status: 0 });
+      await expect(deadAdapter.send(request)).rejects.toMatchObject({
+        code: 'NETWORK_ERROR',
+        status: 0,
+      });
     });
 
     it('timeout throws a TIMEOUT HttpError', async () => {
@@ -174,7 +179,9 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
     it('an already-aborted signal rejects immediately with a CANCELED HttpError', async () => {
       const controller = new AbortController();
       controller.abort();
-      await expect(adapter.send(req({ url: '/json', signal: controller.signal }))).rejects.toMatchObject({
+      await expect(
+        adapter.send(req({ url: '/json', signal: controller.signal })),
+      ).rejects.toMatchObject({
         code: 'CANCELED',
       });
     });
@@ -187,7 +194,9 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
     });
 
     it('invalid JSON in a 200 response throws a PARSE_ERROR HttpError', async () => {
-      await expect(adapter.send(req({ url: '/invalid-json' }))).rejects.toMatchObject({ code: 'PARSE_ERROR' });
+      await expect(adapter.send(req({ url: '/invalid-json' }))).rejects.toMatchObject({
+        code: 'PARSE_ERROR',
+      });
     });
 
     it('normalizes response headers to lowercase keys', async () => {
@@ -214,7 +223,12 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
 
     it('sends a binary body as raw bytes, not JSON-stringified', async () => {
       const response = await adapter.send(
-        req({ url: '/echo-body', method: 'POST', body: new Uint8Array([1, 2, 3]), responseType: 'arrayBuffer' }),
+        req({
+          url: '/echo-body',
+          method: 'POST',
+          body: new Uint8Array([1, 2, 3]),
+          responseType: 'arrayBuffer',
+        }),
       );
       expect(new Uint8Array(response.data as ArrayBuffer)).toEqual(new Uint8Array([1, 2, 3]));
     });

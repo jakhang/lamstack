@@ -133,20 +133,20 @@ export interface HttpRequestInit<TBody = unknown> {
 These run exactly once, before any middleware, and are the same regardless of which
 adapter you use:
 
-| Rule | Behavior |
-| --- | --- |
-| `baseURL` | Combined with a relative `url` via `new URL`-style joining |
-| Absolute `url` | Ignores `baseURL` entirely (detected via a leading `scheme://`) |
-| Slash handling | `baseURL: 'https://a.com/api'` + `url: 'users'` (or `'/users'`) → `https://a.com/api/users` — no doubled or missing slash either way |
-| Header precedence | client-level `headers` ← request-level `headers`, later wins |
-| Header deletion | a `null`/`undefined` header value at the request layer removes a client-level default |
-| Header case | every header key is normalized to lowercase |
-| `params` | `null`/`undefined` values omitted; arrays repeat the key (`id=1&id=2`); `Date` values become ISO strings |
-| Existing query string | `url: '/x?a=1'` + `params: { b: 2 }` → `/x?a=1&b=2` (merged, not replaced) |
-| `method` | defaults to `'GET'`, uppercased |
-| `timeout` | defaults to `0` (unlimited) |
-| `credentials` | defaults to `'same-origin'` |
-| `responseType` | defaults to `'json'` |
+| Rule                  | Behavior                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `baseURL`             | Combined with a relative `url` via `new URL`-style joining                                                                           |
+| Absolute `url`        | Ignores `baseURL` entirely (detected via a leading `scheme://`)                                                                      |
+| Slash handling        | `baseURL: 'https://a.com/api'` + `url: 'users'` (or `'/users'`) → `https://a.com/api/users` — no doubled or missing slash either way |
+| Header precedence     | client-level `headers` ← request-level `headers`, later wins                                                                         |
+| Header deletion       | a `null`/`undefined` header value at the request layer removes a client-level default                                                |
+| Header case           | every header key is normalized to lowercase                                                                                          |
+| `params`              | `null`/`undefined` values omitted; arrays repeat the key (`id=1&id=2`); `Date` values become ISO strings                             |
+| Existing query string | `url: '/x?a=1'` + `params: { b: 2 }` → `/x?a=1&b=2` (merged, not replaced)                                                           |
+| `method`              | defaults to `'GET'`, uppercased                                                                                                      |
+| `timeout`             | defaults to `0` (unlimited)                                                                                                          |
+| `credentials`         | defaults to `'same-origin'`                                                                                                          |
+| `responseType`        | defaults to `'json'`                                                                                                                 |
 
 ### The middleware pipeline
 
@@ -165,7 +165,7 @@ interface HttpPlugin {
 full `HttpPlugin` object. Plugins run in `order` order — ties preserve registration order.
 
 **`next()` is re-entrant.** A middleware may call it more than once; each call re-runs
-only the chain *after* that middleware, never anything that already ran. This is what
+only the chain _after_ that middleware, never anything that already ran. This is what
 lets `refresh` retry a request after a token refresh without re-running whatever is
 registered outside it (logging, tracing, ...):
 
@@ -290,32 +290,32 @@ function myAdapter(): HttpAdapter {
 
 ```ts
 new HttpClient({
-  adapter,               // HttpAdapter — required
-  baseURL,                // string?
-  headers,                 // HeadersInput?
-  timeout,                  // number?
-  credentials,               // 'omit' | 'same-origin' | 'include'?
-  responseType,                // ResponseType?
-  paramsSerializer,              // (params) => string?
-  fileSerializer,                 // FileSerializer? — default WebFileSerializer, see File uploads
+  adapter, // HttpAdapter — required
+  baseURL, // string?
+  headers, // HeadersInput?
+  timeout, // number?
+  credentials, // 'omit' | 'same-origin' | 'include'?
+  responseType, // ResponseType?
+  paramsSerializer, // (params) => string?
+  fileSerializer, // FileSerializer? — default WebFileSerializer, see File uploads
 });
 ```
 
-| Method | Returns | Notes |
-| --- | --- | --- |
-| `use(pluginOrMiddleware)` | `this` | Registers a plugin — chainable |
-| `request<T>(init)` | `Promise<HttpResponse<T>>` | The only method returning the full response, not just `data` |
-| `get<T>(url, init?)` | `Promise<T>` | |
-| `delete<T>(url, init?)` | `Promise<T>` | |
-| `head(url, init?)` | `Promise<HttpHeaders>` | Returns the response headers directly |
-| `post<T, B>(url, body?, init?)` | `Promise<T>` | |
-| `put<T, B>(url, body?, init?)` | `Promise<T>` | |
-| `patch<T, B>(url, body?, init?)` | `Promise<T>` | |
-| `upload<T>(url, data, init?)` | `Promise<T>` | `data` is a plain object or an existing `FormData` — see [File uploads](#file-uploads) |
-| `download(url, init?)` | `Promise<Blob>` | Forces `responseType: 'blob'` |
-| `extend(options?)` | `HttpClient` | New client, options merged over the parent's, **inheriting the plugins registered so far** (a snapshot — later `.use()` calls on either client don't affect the other) |
+| Method                           | Returns                    | Notes                                                                                                                                                                  |
+| -------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `use(pluginOrMiddleware)`        | `this`                     | Registers a plugin — chainable                                                                                                                                         |
+| `request<T>(init)`               | `Promise<HttpResponse<T>>` | The only method returning the full response, not just `data`                                                                                                           |
+| `get<T>(url, init?)`             | `Promise<T>`               |                                                                                                                                                                        |
+| `delete<T>(url, init?)`          | `Promise<T>`               |                                                                                                                                                                        |
+| `head(url, init?)`               | `Promise<HttpHeaders>`     | Returns the response headers directly                                                                                                                                  |
+| `post<T, B>(url, body?, init?)`  | `Promise<T>`               |                                                                                                                                                                        |
+| `put<T, B>(url, body?, init?)`   | `Promise<T>`               |                                                                                                                                                                        |
+| `patch<T, B>(url, body?, init?)` | `Promise<T>`               |                                                                                                                                                                        |
+| `upload<T>(url, data, init?)`    | `Promise<T>`               | `data` is a plain object or an existing `FormData` — see [File uploads](#file-uploads)                                                                                 |
+| `download(url, init?)`           | `Promise<Blob>`            | Forces `responseType: 'blob'`                                                                                                                                          |
+| `extend(options?)`               | `HttpClient`               | New client, options merged over the parent's, **inheriting the plugins registered so far** (a snapshot — later `.use()` calls on either client don't affect the other) |
 
-`extend()` is what you use to build a `refreshClient` — call it *before* registering
+`extend()` is what you use to build a `refreshClient` — call it _before_ registering
 `auth`/`refresh` on the main client, so the extended client inherits neither and can't
 recurse into its own refresh logic:
 
@@ -450,7 +450,7 @@ one backed by a secure OS keychain) implements the same six methods and works wi
 ## Session events (`HttpEventBus`)
 
 A typed pub/sub for session-level state — deliberately separate from the request
-pipeline, since these describe the *session*, not any one request:
+pipeline, since these describe the _session_, not any one request:
 
 ```ts
 import { HttpEventBus } from '@lamstack/http-client';
@@ -474,11 +474,11 @@ across unrelated `HttpClient` instances implicitly. `on()` returns an unsubscrib
 function, which composes naturally with a React `useEffect` cleanup. A throwing listener
 never prevents its siblings from running.
 
-| Event | Payload | Fires |
-| --- | --- | --- |
-| `unauthorized` | `{ error: HttpError }` | Once per request that can't refresh (`canRefresh()` false), and once per failed refresh cycle (never once per queued request) |
-| `token:refreshed` | `{}` | Once per successful refresh cycle |
-| `token:refresh-failed` | `{ error: unknown }` | Once per failed refresh cycle, before `unauthorized` |
+| Event                  | Payload                | Fires                                                                                                                         |
+| ---------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `unauthorized`         | `{ error: HttpError }` | Once per request that can't refresh (`canRefresh()` false), and once per failed refresh cycle (never once per queued request) |
+| `token:refreshed`      | `{}`                   | Once per successful refresh cycle                                                                                             |
+| `token:refresh-failed` | `{ error: unknown }`   | Once per failed refresh cycle, before `unauthorized`                                                                          |
 
 ## Error handling
 
@@ -511,7 +511,7 @@ try {
 ```
 
 `errorMapper` reshapes an `HttpError` into your own domain error type, registered
-*outside* `refresh`/`auth` (`PluginOrder.normalize`) so `refresh` always sees the raw
+_outside_ `refresh`/`auth` (`PluginOrder.normalize`) so `refresh` always sees the raw
 `HttpError` — only errors that survive a refresh retry ever reach the mapper:
 
 ```ts
@@ -553,7 +553,10 @@ React Native (no `File`/`Blob`; a `FormData` polyfill that expects
 ```ts
 import { NativeFileSerializer } from '@lamstack/http-client';
 
-const client = new HttpClient({ adapter: fetchAdapter(), fileSerializer: new NativeFileSerializer() });
+const client = new HttpClient({
+  adapter: fetchAdapter(),
+  fileSerializer: new NativeFileSerializer(),
+});
 
 await client.upload('/files', { avatar: { uri: 'file://photo.jpg' } });
 ```
@@ -607,7 +610,7 @@ function clientIdPlugin(clientId: string): HttpPlugin {
 client.use(clientIdPlugin('abc123'));
 ```
 
-A retry-style plugin that inspects the response *after* `next()` resolves/rejects:
+A retry-style plugin that inspects the response _after_ `next()` resolves/rejects:
 
 ```ts
 function loggingPlugin(): HttpPlugin {
@@ -631,7 +634,7 @@ function loggingPlugin(): HttpPlugin {
 
 Remember `next()` is re-entrant (see [The middleware pipeline](#the-middleware-pipeline))
 — a plugin that retries by calling `next()` again only re-runs middleware registered
-*after* itself, which is exactly what makes that safe to do from inside `.use()`.
+_after_ itself, which is exactly what makes that safe to do from inside `.use()`.
 
 ## Testing code that uses this package
 
@@ -646,7 +649,13 @@ function scriptedAdapter(response: Partial<HttpResponse>): HttpAdapter {
     name: 'scripted',
     capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
     async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
-      return { status: 200, statusText: 'OK', headers: {}, request, ...response } as HttpResponse<T>;
+      return {
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        request,
+        ...response,
+      } as HttpResponse<T>;
     },
   };
 }

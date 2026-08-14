@@ -6,7 +6,12 @@ const request = resolve({ url: '/x' });
 
 describe('HttpError', () => {
   it('carries code/status/data/request', () => {
-    const error = new HttpError('Not Found', { code: 'HTTP_ERROR', status: 404, data: { reason: 'gone' }, request });
+    const error = new HttpError('Not Found', {
+      code: 'HTTP_ERROR',
+      status: 404,
+      data: { reason: 'gone' },
+      request,
+    });
     expect(error.code).toBe('HTTP_ERROR');
     expect(error.status).toBe(404);
     expect(error.data).toEqual({ reason: 'gone' });
@@ -16,8 +21,12 @@ describe('HttpError', () => {
   });
 
   it('isNetworkError is true only when code is NETWORK_ERROR — not just because status is 0', () => {
-    expect(new HttpError('x', { code: 'NETWORK_ERROR', status: 0, request }).isNetworkError).toBe(true);
-    expect(new HttpError('x', { code: 'HTTP_ERROR', status: 404, request }).isNetworkError).toBe(false);
+    expect(new HttpError('x', { code: 'NETWORK_ERROR', status: 0, request }).isNetworkError).toBe(
+      true,
+    );
+    expect(new HttpError('x', { code: 'HTTP_ERROR', status: 404, request }).isNetworkError).toBe(
+      false,
+    );
     // CANCELED, TIMEOUT, and UNKNOWN also carry status: 0 — none of them are network errors.
     expect(new HttpError('x', { code: 'CANCELED', status: 0, request }).isNetworkError).toBe(false);
     expect(new HttpError('x', { code: 'TIMEOUT', status: 0, request }).isNetworkError).toBe(false);
@@ -31,13 +40,23 @@ describe('HttpError', () => {
 
   it('exposes the triggering error via .cause', () => {
     const cause = new Error('ECONNREFUSED');
-    const error = new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
+    const error = new HttpError('Network Error', {
+      code: 'NETWORK_ERROR',
+      status: 0,
+      request,
+      cause,
+    });
     expect(error.cause).toBe(cause);
   });
 
   it('.cause is non-enumerable, matching native Error.cause — it must not leak into JSON.stringify/spread/Object.keys', () => {
     const cause = new Error('ECONNREFUSED');
-    const error = new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
+    const error = new HttpError('Network Error', {
+      code: 'NETWORK_ERROR',
+      status: 0,
+      request,
+      cause,
+    });
 
     expect(Object.getOwnPropertyDescriptor(error, 'cause')?.enumerable).toBe(false);
     expect(Object.keys(error)).not.toContain('cause');

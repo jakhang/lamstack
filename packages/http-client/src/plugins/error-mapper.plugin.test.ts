@@ -36,7 +36,9 @@ describe('errorMapper', () => {
     const client = new HttpClient({ adapter: failingAdapter(422, { reason: 'invalid' }) });
     client.use(errorMapper(() => new DomainError('mapped')));
 
-    const error: unknown = await client.get('/x', { meta: { mapError: false } }).catch((e: unknown) => e);
+    const error: unknown = await client
+      .get('/x', { meta: { mapError: false } })
+      .catch((e: unknown) => e);
 
     expect(HttpError.is(error)).toBe(true);
     expect((error as HttpError).status).toBe(422);

@@ -1,5 +1,11 @@
 import { HttpError } from '../core/http-error';
-import type { HttpAdapter, HttpHeaders, HttpRequest, HttpResponse, ResponseType } from '../core/types';
+import type {
+  HttpAdapter,
+  HttpHeaders,
+  HttpRequest,
+  HttpResponse,
+  ResponseType,
+} from '../core/types';
 
 export interface FetchAdapterOptions {
   fetch?: typeof globalThis.fetch;
@@ -36,7 +42,10 @@ function normalizeHeaders(headers: Headers): HttpHeaders {
 class JsonParseFailure extends Error {
   readonly cause: unknown;
 
-  constructor(readonly rawText: string, cause: unknown) {
+  constructor(
+    readonly rawText: string,
+    cause: unknown,
+  ) {
     super('Failed to parse response body');
     this.cause = cause;
   }
@@ -74,7 +83,9 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
     capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
     async send<T = unknown>(request: HttpRequest): Promise<HttpResponse<T>> {
       if (request.responseType === 'stream') {
-        throw new Error("fetchAdapter does not support responseType: 'stream' (capabilities.stream is false)");
+        throw new Error(
+          "fetchAdapter does not support responseType: 'stream' (capabilities.stream is false)",
+        );
       }
 
       const outgoingHeaders: Record<string, string> = { ...request.headers };
@@ -82,7 +93,9 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
 
       const timeoutController = new AbortController();
       const timer =
-        request.timeout > 0 ? setTimeout(() => timeoutController.abort(), request.timeout) : undefined;
+        request.timeout > 0
+          ? setTimeout(() => timeoutController.abort(), request.timeout)
+          : undefined;
       const signal = request.signal
         ? AbortSignal.any([request.signal, timeoutController.signal])
         : timeoutController.signal;
@@ -99,12 +112,27 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
           });
         } catch (cause) {
           if (request.signal?.aborted) {
-            throw new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause });
+            throw new HttpError('Request canceled', {
+              code: 'CANCELED',
+              status: 0,
+              request,
+              cause,
+            });
           }
           if (timeoutController.signal.aborted) {
-            throw new HttpError('Request timed out', { code: 'TIMEOUT', status: 0, request, cause });
+            throw new HttpError('Request timed out', {
+              code: 'TIMEOUT',
+              status: 0,
+              request,
+              cause,
+            });
           }
-          throw new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
+          throw new HttpError('Network Error', {
+            code: 'NETWORK_ERROR',
+            status: 0,
+            request,
+            cause,
+          });
         }
 
         const ok = response.status >= 200 && response.status < 300;
@@ -123,11 +151,26 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
             }
             data = cause.rawText;
           } else if (request.signal?.aborted) {
-            throw new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause });
+            throw new HttpError('Request canceled', {
+              code: 'CANCELED',
+              status: 0,
+              request,
+              cause,
+            });
           } else if (timeoutController.signal.aborted) {
-            throw new HttpError('Request timed out', { code: 'TIMEOUT', status: 0, request, cause });
+            throw new HttpError('Request timed out', {
+              code: 'TIMEOUT',
+              status: 0,
+              request,
+              cause,
+            });
           } else {
-            throw new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
+            throw new HttpError('Network Error', {
+              code: 'NETWORK_ERROR',
+              status: 0,
+              request,
+              cause,
+            });
           }
         }
 
@@ -141,13 +184,16 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
         };
 
         if (!ok) {
-          throw new HttpError(response.statusText || `Request failed with status ${response.status}`, {
-            code: 'HTTP_ERROR',
-            status: response.status,
-            data: data as T,
-            request,
-            response: httpResponse,
-          });
+          throw new HttpError(
+            response.statusText || `Request failed with status ${response.status}`,
+            {
+              code: 'HTTP_ERROR',
+              status: response.status,
+              data: data as T,
+              request,
+              response: httpResponse,
+            },
+          );
         }
 
         return httpResponse;

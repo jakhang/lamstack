@@ -4,7 +4,7 @@ import { NativeFileSerializer } from './native-file.serializer';
 describe('NativeFileSerializer', () => {
   const serializer = new NativeFileSerializer();
 
-  it('accepts a { uri } object (React Native\'s file shape)', () => {
+  it("accepts a { uri } object (React Native's file shape)", () => {
     expect(serializer.accepts({ uri: 'file://photo.jpg' })).toBe(true);
   });
 
@@ -34,7 +34,11 @@ describe('NativeFileSerializer', () => {
     const append = vi.fn();
     const formData = { append } as unknown as FormData;
 
-    serializer.serialize(formData, 'avatar', { uri: 'file://photo.jpg', type: 'image/jpeg', name: 'photo.jpg' });
+    serializer.serialize(formData, 'avatar', {
+      uri: 'file://photo.jpg',
+      type: 'image/jpeg',
+      name: 'photo.jpg',
+    });
 
     expect(append).toHaveBeenCalledWith('avatar', {
       uri: 'file://photo.jpg',
@@ -47,7 +51,10 @@ describe('NativeFileSerializer', () => {
     const append = vi.fn();
     const formData = { append } as unknown as FormData;
 
-    serializer.serialize(formData, 'avatar', { uri: 'file://photo.jpg', fileName: 'from-camera.jpg' });
+    serializer.serialize(formData, 'avatar', {
+      uri: 'file://photo.jpg',
+      fileName: 'from-camera.jpg',
+    });
 
     expect(append).toHaveBeenCalledWith(
       'avatar',

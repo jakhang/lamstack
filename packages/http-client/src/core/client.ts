@@ -95,7 +95,11 @@ export class HttpClient {
    * `Content-Type` — the adapter's transport must generate the multipart
    * boundary itself.
    */
-  async upload<T = unknown>(url: string, data: Record<string, unknown> | FormData, init?: VerbInit): Promise<T> {
+  async upload<T = unknown>(
+    url: string,
+    data: Record<string, unknown> | FormData,
+    init?: VerbInit,
+  ): Promise<T> {
     const body = data instanceof FormData ? data : this.formBuilder.build(data);
     const response = await this.request<T>({ ...init, url, method: 'POST', body });
     return response.data;
@@ -103,7 +107,12 @@ export class HttpClient {
 
   /** GET request whose response is resolved as a `Blob`. */
   async download(url: string, init?: VerbInit): Promise<Blob> {
-    const response = await this.request<Blob>({ ...init, url, method: 'GET', responseType: 'blob' });
+    const response = await this.request<Blob>({
+      ...init,
+      url,
+      method: 'GET',
+      responseType: 'blob',
+    });
     return response.data;
   }
 

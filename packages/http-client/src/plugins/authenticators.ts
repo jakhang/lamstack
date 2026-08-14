@@ -8,7 +8,8 @@ export interface BearerOptions {
   scheme?: string;
 }
 
-export type BearerSource = { getAccessToken(): Awaitable<string | null> } | (() => Awaitable<string | null>);
+export type BearerSource =
+  { getAccessToken(): Awaitable<string | null> } | (() => Awaitable<string | null>);
 
 /** Attaches the current access token as a header — the common case. Accepts anything with a `getAccessToken()`, or a plain function. */
 export function bearer(source: BearerSource, options: BearerOptions = {}): Authenticator {
@@ -19,7 +20,10 @@ export function bearer(source: BearerSource, options: BearerOptions = {}): Authe
   return async (request) => {
     const token = await getAccessToken();
     if (!token) return request;
-    return { ...request, headers: { ...request.headers, [header]: scheme ? `${scheme} ${token}` : token } };
+    return {
+      ...request,
+      headers: { ...request.headers, [header]: scheme ? `${scheme} ${token}` : token },
+    };
   };
 }
 
@@ -41,14 +45,20 @@ export function apiKey(options: ApiKeyOptions): Authenticator {
     }
 
     const pair = `${encodeURIComponent(options.name)}=${encodeURIComponent(value)}`;
-    return { ...request, url: request.url.includes('?') ? `${request.url}&${pair}` : `${request.url}?${pair}` };
+    return {
+      ...request,
+      url: request.url.includes('?') ? `${request.url}&${pair}` : `${request.url}?${pair}`,
+    };
   };
 }
 
 /** Attaches a static `Authorization: Basic <base64>` header from a username/password pair. */
 export function basic(username: string, password: string): Authenticator {
   const token = btoa(`${username}:${password}`);
-  return async (request) => ({ ...request, headers: { ...request.headers, authorization: `Basic ${token}` } });
+  return async (request) => ({
+    ...request,
+    headers: { ...request.headers, authorization: `Basic ${token}` },
+  });
 }
 
 /** Composes several authenticators, applying each in order to the previous one's output. */

@@ -41,7 +41,9 @@ describe('HttpClient — verb helpers', () => {
   });
 
   it('request<T>() returns the full HttpResponse', async () => {
-    const client = new HttpClient({ adapter: fakeAdapter(() => ({ data: { ok: true }, status: 201 })) });
+    const client = new HttpClient({
+      adapter: fakeAdapter(() => ({ data: { ok: true }, status: 201 })),
+    });
     const response = await client.request<{ ok: boolean }>({ url: '/x' });
     expect(response.status).toBe(201);
     expect(response.data).toEqual({ ok: true });
@@ -252,7 +254,8 @@ describe('HttpClient — upload()', () => {
 
 describe('HttpClient — download()', () => {
   it('returns a Blob', async () => {
-    const fetchStub = (async () => new Response(new Blob(['binary-data']), { status: 200 })) as typeof fetch;
+    const fetchStub = (async () =>
+      new Response(new Blob(['binary-data']), { status: 200 })) as typeof fetch;
     const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
 
     const blob = await client.download('/x');

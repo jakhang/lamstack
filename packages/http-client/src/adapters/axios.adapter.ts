@@ -1,6 +1,16 @@
-import axios, { type AxiosInstance, type AxiosResponse, type ResponseType as AxiosResponseType } from 'axios';
+import axios, {
+  type AxiosInstance,
+  type AxiosResponse,
+  type ResponseType as AxiosResponseType,
+} from 'axios';
 import { HttpError } from '../core/http-error';
-import type { HttpAdapter, HttpHeaders, HttpRequest, HttpResponse, ResponseType } from '../core/types';
+import type {
+  HttpAdapter,
+  HttpHeaders,
+  HttpRequest,
+  HttpResponse,
+  ResponseType,
+} from '../core/types';
 
 /**
  * Always requests raw text/binary from axios and parses it ourselves — axios's
@@ -36,7 +46,10 @@ function normalizeHeaders(headers: AxiosResponse['headers']): HttpHeaders {
 class JsonParseFailure extends Error {
   readonly cause: unknown;
 
-  constructor(readonly rawText: string, cause: unknown) {
+  constructor(
+    readonly rawText: string,
+    cause: unknown,
+  ) {
     super('Failed to parse response body');
     this.cause = cause;
   }
@@ -71,7 +84,9 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
     capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
     async send<T = unknown>(request: HttpRequest): Promise<HttpResponse<T>> {
       if (request.responseType === 'stream') {
-        throw new Error("axiosAdapter does not support responseType: 'stream' (capabilities.stream is false)");
+        throw new Error(
+          "axiosAdapter does not support responseType: 'stream' (capabilities.stream is false)",
+        );
       }
 
       // Own the timeout via AbortController rather than axios's `timeout` option: once a
@@ -80,7 +95,9 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
       // ECONNABORTED/ETIMEDOUT — so relying on those codes alone misses a mid-body timeout.
       const timeoutController = new AbortController();
       const timer =
-        request.timeout > 0 ? setTimeout(() => timeoutController.abort(), request.timeout) : undefined;
+        request.timeout > 0
+          ? setTimeout(() => timeoutController.abort(), request.timeout)
+          : undefined;
       const signal = request.signal
         ? AbortSignal.any([request.signal, timeoutController.signal])
         : timeoutController.signal;
@@ -106,7 +123,10 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
         if (axios.isCancel(cause) || (axios.isAxiosError(cause) && cause.code === 'ERR_CANCELED')) {
           throw new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause });
         }
-        if (axios.isAxiosError(cause) && (cause.code === 'ECONNABORTED' || cause.code === 'ETIMEDOUT')) {
+        if (
+          axios.isAxiosError(cause) &&
+          (cause.code === 'ECONNABORTED' || cause.code === 'ETIMEDOUT')
+        ) {
           throw new HttpError('Request timed out', { code: 'TIMEOUT', status: 0, request, cause });
         }
         throw new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
@@ -142,13 +162,16 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
       };
 
       if (!ok) {
-        throw new HttpError(axiosResponse.statusText || `Request failed with status ${axiosResponse.status}`, {
-          code: 'HTTP_ERROR',
-          status: axiosResponse.status,
-          data: data as T,
-          request,
-          response: httpResponse,
-        });
+        throw new HttpError(
+          axiosResponse.statusText || `Request failed with status ${axiosResponse.status}`,
+          {
+            code: 'HTTP_ERROR',
+            status: axiosResponse.status,
+            data: data as T,
+            request,
+            response: httpResponse,
+          },
+        );
       }
 
       return httpResponse;

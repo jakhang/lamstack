@@ -1,6 +1,7 @@
 import type { HttpRequest, HttpResponse } from './types';
 
-export type HttpErrorCode = 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR' | 'UNKNOWN';
+export type HttpErrorCode =
+  'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR' | 'UNKNOWN';
 
 export interface HttpErrorOptions<T> {
   code: HttpErrorCode;
@@ -38,7 +39,11 @@ export class HttpError<T = unknown> extends Error {
     this.response = options.response;
     // Non-enumerable, matching native `new Error(message, { cause })` — a plain `this.cause =`
     // assignment would make it enumerable, leaking into JSON.stringify/spread/Object.keys.
-    Object.defineProperty(this, 'cause', { value: options.cause, enumerable: false, configurable: true });
+    Object.defineProperty(this, 'cause', {
+      value: options.cause,
+      enumerable: false,
+      configurable: true,
+    });
     Object.setPrototypeOf(this, HttpError.prototype);
   }
 
@@ -66,7 +71,12 @@ export class HttpError<T = unknown> extends Error {
   static from(error: unknown, request: HttpRequest): HttpError {
     if (HttpError.is(error)) return error;
     if (error instanceof Error && error.name === 'AbortError') {
-      return new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause: error });
+      return new HttpError('Request canceled', {
+        code: 'CANCELED',
+        status: 0,
+        request,
+        cause: error,
+      });
     }
     const message = error instanceof Error ? error.message : String(error);
     return new HttpError(message, { code: 'UNKNOWN', status: 0, request, cause: error });

@@ -1,4 +1,12 @@
-import type { HeadersInput, HttpHeaders, HttpMeta, HttpRequest, HttpRequestInit, QueryParams, ResponseType } from './types';
+import type {
+  HeadersInput,
+  HttpHeaders,
+  HttpMeta,
+  HttpRequest,
+  HttpRequestInit,
+  QueryParams,
+  ResponseType,
+} from './types';
 
 export interface ResolveDefaults {
   baseURL?: string;
@@ -47,7 +55,11 @@ function defaultParamsSerializer(params: QueryParams): string {
   return search.toString();
 }
 
-function appendParams(url: string, params: QueryParams | undefined, serializer: (params: QueryParams) => string): string {
+function appendParams(
+  url: string,
+  params: QueryParams | undefined,
+  serializer: (params: QueryParams) => string,
+): string {
   if (!params || Object.keys(params).length === 0) return url;
   const query = serializer(params);
   if (!query) return url;

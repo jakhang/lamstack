@@ -47,7 +47,8 @@ export function onStatus(
   return ({ error, request }) => {
     if (!statuses.includes(error.status)) return false;
     for (const pattern of exclude) {
-      const matches = typeof pattern === 'string' ? request.url.includes(pattern) : pattern.test(request.url);
+      const matches =
+        typeof pattern === 'string' ? request.url.includes(pattern) : pattern.test(request.url);
       if (matches) return false;
     }
     return true;
@@ -123,7 +124,10 @@ export function recover(options: RecoverOptions): HttpPlugin {
     name: 'recover',
     order: options.order ?? PluginOrder.recover,
     handler: async (request, next) => {
-      let current: HttpRequest = { ...request, meta: { ...request.meta, [GENERATION]: generation } };
+      let current: HttpRequest = {
+        ...request,
+        meta: { ...request.meta, [GENERATION]: generation },
+      };
 
       while (true) {
         try {
@@ -154,7 +158,10 @@ export function recover(options: RecoverOptions): HttpPlugin {
           // else: a different request's cycle already rotated the credential since this
           // one was dispatched — skip straight to retrying with it, no redundant cycle.
 
-          current = { ...current, meta: { ...current.meta, [ATTEMPT]: attempt + 1, [GENERATION]: generation } };
+          current = {
+            ...current,
+            meta: { ...current.meta, [ATTEMPT]: attempt + 1, [GENERATION]: generation },
+          };
         }
       }
     },

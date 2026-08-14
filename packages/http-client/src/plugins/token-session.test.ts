@@ -117,6 +117,66 @@ describe('tokenSession', () => {
     expect(await session.getAccessToken()).toBeNull();
     expect(await store.getItem('access_token')).toBeNull();
   });
+
+  it('end() also calls the configured onEnd callback, passed the store', async () => {
+    const store = fakeStore();
+    const onEnd = vi.fn(async (endStore: TokenStore) => {
+      await endStore.removeItem('refresh_token');
+    });
+    const session = tokenSession({ store, client: noopClient(), renew: vi.fn(), onEnd });
+
+    await session.end();
+
+    expect(onEnd).toHaveBeenCalledWith(store);
+  });
+
+  it('renew() can set the access token directly from its return value, without touching the store (in-memory-only strategies)', async () => {
+    const store = fakeStore();
+    const session = tokenSession({
+      store,
+      client: noopClient(),
+      renew: async () => 'in-memory-token',
+    });
+
+    await session.renew();
+
+    expect(await session.getAccessToken()).toBe('in-memory-token');
+    expect(await store.getItem('access_token')).toBeNull();
+  });
+
+  it('renew() falls back to re-reading the store when the callback returns nothing', async () => {
+    const store = fakeStore();
+    const session = tokenSession({
+      store,
+      client: noopClient(),
+      renew: async (_client, renewStore) => {
+        await renewStore.setItem('access_token', 'from-store');
+      },
+    });
+
+    await session.renew();
+
+    expect(await session.getAccessToken()).toBe('from-store');
+  });
+
+  it('save() runs the configured save callback and updates the cached access token from its return value', async () => {
+    const store = fakeStore();
+    const save = vi.fn(
+      async (payload: unknown) => (payload as { accessToken: string }).accessToken,
+    );
+    const session = tokenSession({ store, client: noopClient(), renew: vi.fn(), save });
+
+    await session.save({ accessToken: 'from-login' });
+
+    expect(save).toHaveBeenCalledWith({ accessToken: 'from-login' }, store);
+    expect(await session.getAccessToken()).toBe('from-login');
+  });
+
+  it('save() is a no-op when no save option is configured', async () => {
+    const session = tokenSession({ store: fakeStore(), client: noopClient(), renew: vi.fn() });
+    await expect(session.save({ accessToken: 'ignored' })).resolves.toBeUndefined();
+    expect(await session.getAccessToken()).toBeNull();
+  });
 });
 
 describe('tokenSession — end-to-end with auth(bearer(session)) + recover()', () => {

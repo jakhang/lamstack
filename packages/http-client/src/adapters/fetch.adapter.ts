@@ -83,64 +83,73 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
         ? AbortSignal.any([request.signal, timeoutController.signal])
         : timeoutController.signal;
 
-      let response: Response;
       try {
-        response = await fetchImpl(request.url, {
-          method: request.method,
-          headers: outgoingHeaders,
-          body,
-          credentials: request.credentials,
-          signal,
-        });
-      } catch (cause) {
-        clearTimeout(timer);
-        if (request.signal?.aborted) {
-          throw new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause });
+        let response: Response;
+        try {
+          response = await fetchImpl(request.url, {
+            method: request.method,
+            headers: outgoingHeaders,
+            body,
+            credentials: request.credentials,
+            signal,
+          });
+        } catch (cause) {
+          if (request.signal?.aborted) {
+            throw new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause });
+          }
+          if (timeoutController.signal.aborted) {
+            throw new HttpError('Request timed out', { code: 'TIMEOUT', status: 0, request, cause });
+          }
+          throw new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
         }
-        if (timeoutController.signal.aborted) {
-          throw new HttpError('Request timed out', { code: 'TIMEOUT', status: 0, request, cause });
-        }
-        throw new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
-      }
-      clearTimeout(timer);
 
-      const ok = response.status >= 200 && response.status < 300;
-      let data: unknown;
-      try {
-        data = await parseBody(response, request.responseType);
-      } catch (cause) {
-        if (!ok && cause instanceof JsonParseFailure) {
-          data = cause.rawText;
-        } else {
-          throw new HttpError('Failed to parse response body', {
-            code: 'PARSE_ERROR',
+        const ok = response.status >= 200 && response.status < 300;
+        let data: unknown;
+        try {
+          data = await parseBody(response, request.responseType);
+        } catch (cause) {
+          if (cause instanceof JsonParseFailure) {
+            if (ok) {
+              throw new HttpError('Failed to parse response body', {
+                code: 'PARSE_ERROR',
+                status: response.status,
+                request,
+                cause,
+              });
+            }
+            data = cause.rawText;
+          } else if (request.signal?.aborted) {
+            throw new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause });
+          } else if (timeoutController.signal.aborted) {
+            throw new HttpError('Request timed out', { code: 'TIMEOUT', status: 0, request, cause });
+          } else {
+            throw new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
+          }
+        }
+
+        const httpResponse: HttpResponse<T> = {
+          data: data as T,
+          status: response.status,
+          statusText: response.statusText,
+          headers: normalizeHeaders(response.headers),
+          request,
+          raw: response,
+        };
+
+        if (!ok) {
+          throw new HttpError(response.statusText || `Request failed with status ${response.status}`, {
+            code: 'HTTP_ERROR',
             status: response.status,
+            data: data as T,
             request,
-            cause,
+            response: httpResponse,
           });
         }
+
+        return httpResponse;
+      } finally {
+        clearTimeout(timer);
       }
-
-      const httpResponse: HttpResponse<T> = {
-        data: data as T,
-        status: response.status,
-        statusText: response.statusText,
-        headers: normalizeHeaders(response.headers),
-        request,
-        raw: response,
-      };
-
-      if (!ok) {
-        throw new HttpError(response.statusText || `Request failed with status ${response.status}`, {
-          code: 'HTTP_ERROR',
-          status: response.status,
-          data: data as T,
-          request,
-          response: httpResponse,
-        });
-      }
-
-      return httpResponse;
     },
   };
 }

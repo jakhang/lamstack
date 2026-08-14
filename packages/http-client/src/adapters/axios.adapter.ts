@@ -70,6 +70,17 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
     name: 'axios',
     capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
     async send<T = unknown>(request: HttpRequest): Promise<HttpResponse<T>> {
+      // Own the timeout via AbortController rather than axios's `timeout` option: once a
+      // response starts streaming, axios's internal timeout destroys the response stream and
+      // surfaces it as a generic ERR_BAD_RESPONSE ("stream has been aborted"), not
+      // ECONNABORTED/ETIMEDOUT — so relying on those codes alone misses a mid-body timeout.
+      const timeoutController = new AbortController();
+      const timer =
+        request.timeout > 0 ? setTimeout(() => timeoutController.abort(), request.timeout) : undefined;
+      const signal = request.signal
+        ? AbortSignal.any([request.signal, timeoutController.signal])
+        : timeoutController.signal;
+
       let axiosResponse: AxiosResponse<unknown>;
       try {
         axiosResponse = await instance.request<unknown>({
@@ -77,8 +88,7 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
           method: request.method,
           headers: request.headers,
           data: request.body,
-          signal: request.signal,
-          timeout: request.timeout > 0 ? request.timeout : undefined,
+          signal,
           withCredentials: request.credentials === 'include',
           responseType: mapAxiosResponseType(request.responseType),
           transformResponse: (data: unknown) => data,
@@ -86,6 +96,9 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
           validateStatus: () => true,
         });
       } catch (cause) {
+        if (timeoutController.signal.aborted) {
+          throw new HttpError('Request timed out', { code: 'TIMEOUT', status: 0, request, cause });
+        }
         if (axios.isCancel(cause) || (axios.isAxiosError(cause) && cause.code === 'ERR_CANCELED')) {
           throw new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause });
         }
@@ -93,6 +106,8 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
           throw new HttpError('Request timed out', { code: 'TIMEOUT', status: 0, request, cause });
         }
         throw new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
+      } finally {
+        clearTimeout(timer);
       }
 
       const ok = axiosResponse.status >= 200 && axiosResponse.status < 300;

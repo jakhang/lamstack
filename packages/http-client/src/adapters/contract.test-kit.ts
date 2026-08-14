@@ -49,6 +49,11 @@ const routes: Record<string, Route> = {
     res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
     res.end(Buffer.from([1, 2, 3, 4]));
   },
+  '/slow-body': (_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.write('{"a":1');
+    setTimeout(() => res.end(',"b":2}'), 100);
+  },
   '/echo-body': (req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -154,6 +159,13 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
 
     it('timeout throws a TIMEOUT HttpError', async () => {
       await expect(adapter.send(req({ url: '/slow', timeout: 30 }))).rejects.toMatchObject({
+        code: 'TIMEOUT',
+        status: 0,
+      });
+    });
+
+    it('a timeout that elapses while the body is still streaming in still throws TIMEOUT, not a resolved response', async () => {
+      await expect(adapter.send(req({ url: '/slow-body', timeout: 30 }))).rejects.toMatchObject({
         code: 'TIMEOUT',
         status: 0,
       });

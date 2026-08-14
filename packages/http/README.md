@@ -684,7 +684,7 @@ for the full rationale:
 
 This package generalizes a production `HttpClient` implementation (axios-only) from an
 internal dashboard into an adapter-agnostic, publicly reusable one — see
-[SPEC.md §5](./SPEC.md#5-ported-behavior-parity-checklist-against-omnireactcom-dashboardsrclibhttp-client)
+[SPEC.md §5](./SPEC.md#5-ported-behavior-parity-checklist-against-omnicomdashboardsrclibhttp-client)
 for the full parity checklist against that original implementation, including the two
 deliberate behavior improvements made along the way (per-request error identity on a
 failed shared refresh, and `extend()` replacing a manually-constructed second client).

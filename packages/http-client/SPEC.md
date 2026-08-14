@@ -1,23 +1,25 @@
-# SPEC — @lamstack/http
+# SPEC — @lamstack/http-client
 
-**Status:** v2 — supersedes the v1 draft. Architecture incorporates a redesign that fixed
-a real bug in v1 (`dispatch()` re-entering the pipeline from the top would have run
-outer middleware twice on every retry) and formalizes plugin ordering, the
-request/response contract, and the adapter contract. **v1 _scope_ stays deliberately
-lean** per this session's interview — `retryPlugin` and progress capabilities
+**Status:** v3 — supersedes v2. v2 fixed a real v1-draft bug (`dispatch()` re-entering
+the pipeline from the top would have run outer middleware twice on every retry) and
+formalized plugin ordering, the request/response contract, and the adapter contract. v3
+is a deliberate breaking change to the auth/refresh layer while the package is still at
+`0.x` and unpublished (Part B below): `TokenProvider`'s six methods, shared by two
+unrelated concerns, are split into an `Authenticator` contract (`auth()`) and a generic
+recovery contract (`recover()`), with `HttpEventBus` replaced by a generic `EventBus<TMap>`.
+**v1 _scope_ stays deliberately lean** — `retryPlugin` and progress capabilities
 (`onUploadProgress`/`onDownloadProgress`) are architected for (reserved `PluginOrder.retry`
-slot, `AdapterCapabilities` shape) but **not implemented** until v1.1. Everything in this
-document describes the v1 build unless explicitly marked "v1.1."
+slot, `AdapterCapabilities` shape) but **not implemented** until v1.1.
 
 ## 1. Objective
 
-`@lamstack/http` is a framework-agnostic HTTP client core with zero hard dependency on
-`axios` or `fetch`. All transport goes through a pluggable `HttpAdapter`; all "smart"
-behavior (auth header injection, 401 detection, refresh-and-retry, request queueing
-during refresh, error mapping) is implemented as **plugins** on a Koa/onion-style
-middleware pipeline — not hardcoded into the client class. Built-in plugins (`authPlugin`,
-`refreshPlugin`) use the exact same public `client.use()` API a consumer's own plugin
-would use; they hold no special privilege beyond the public `PluginOrder` constants.
+`@lamstack/http-client` is a framework-agnostic HTTP client core with zero hard
+dependency on `axios` or `fetch`. All transport goes through a pluggable `HttpAdapter`;
+all "smart" behavior (credential attachment, failure recovery, error mapping) is
+implemented as **plugins** on a Koa/onion-style middleware pipeline — not hardcoded into
+the client class. Built-in plugins (`auth`, `recover`, `errorMapper`) use the exact same
+public `client.use()` API a consumer's own plugin would use; they hold no special
+privilege beyond the public `PluginOrder` constants.
 
 This generalizes a real, working axios-only `HttpClient` already running in production at
 `omni.com/dashboard` (`src/lib/http-client/`) into a reusable, publishable package that
@@ -38,11 +40,16 @@ migrating `omni.com/dashboard` off its local `http-client` onto this package.
   `{ uploadProgress: false, downloadProgress: false, stream: false }`) so the v1.1
   interface doesn't change shape, only behavior.
 - No new npm scope or sibling package for adapters — `axios`/`fetch` adapters ship as
-  subpath exports of this one package (`@lamstack/http/adapters/fetch`,
-  `@lamstack/http/adapters/axios`), matching how `@lamstack/initializer` has no
+  subpath exports of this one package (`@lamstack/http-client/adapters/fetch`,
+  `@lamstack/http-client/adapters/axios`), matching how `@lamstack/initializer` has no
   framework-target prefix and avoiding an empty placeholder package.
 - No React-specific bindings (no `@lamstack/react-http`) — out of scope until a concrete
   React-only need exists.
+- **`tokenSession()`/`TokenStore`** (the session layer meant to eventually replace
+  `LocalStorageTokenProvider`/`CookieHttpOnlyTokenProvider`, see §5) — genuinely
+  underspecified as of v3; deferred pending a concrete design rather than invented ad hoc.
+  `TokenProvider` and both shipped strategies are unchanged and still exported in the
+  meantime — see §5.
 
 ## 2. Core Contracts
 
@@ -116,7 +123,11 @@ export interface HttpResponse<T = unknown> {
   readonly raw?: unknown;
 }
 
-export type HttpErrorCode = 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR';
+// 'UNKNOWN' is HttpError.from()'s fallback for a caught value that isn't recognizably a
+// transport failure — e.g. a bug in a plugin between recover()/errorMapper() and the
+// adapter. Never claims NETWORK_ERROR for something that might not be.
+export type HttpErrorCode =
+  'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR' | 'UNKNOWN';
 
 export class HttpError<T = unknown> extends Error {
   readonly name = 'HttpError';
@@ -148,15 +159,15 @@ export type Middleware = (req: HttpRequest, next: Next) => Promise<HttpResponse>
 
 `next()` is **re-entrant** — a middleware may call it more than once, and each call
 re-runs only the **inner** portion of the onion (not the whole pipeline from the top).
-This is what makes refresh-and-retry work without the v1-draft bug where re-entering
+This is what makes recover-and-retry work without the v1-draft bug where re-entering
 from the top ran outer middleware (e.g. an observability plugin) twice per retry:
 
 ```
-observe → refresh → auth → transport
+observe → recover → auth → transport
 ```
 
-If `refresh` calls `next(req)` a second time, only `auth → transport` re-run; `observe`
-and `refresh` itself each ran exactly once. **This must be an explicit test**, not just
+If `recover` calls `next(req)` a second time, only `auth → transport` re-run; `observe`
+and `recover` itself each ran exactly once. **This must be an explicit test**, not just
 an architectural claim.
 
 Any middleware placed _inside_ a retrying middleware must be safe to run more than once
@@ -175,7 +186,7 @@ export interface HttpPlugin {
 export const PluginOrder = {
   observe: -200,
   normalize: -100,
-  refresh: 0,
+  recover: 0,
   retry: 50, // reserved for v1.1's retryPlugin — no plugin uses this slot in v1
   auth: 100,
   transport: 200,
@@ -185,20 +196,34 @@ export const PluginOrder = {
 `PluginOrder` is public and part of the semver contract from `1.0.0`: smaller numbers
 run further outside; equal `order` preserves `use()` insertion order; existing values
 never change in a minor/patch release; gaps are intentional so third-party plugins can
-insert between built-in layers.
+insert between built-in layers. The slot names are stable independent of which plugin
+occupies them — `PluginOrder.recover` is unchanged from v2's `PluginOrder.refresh`
+(the plugin at that slot was renamed, the slot itself was not).
+
+A plain `Middleware` function registered via `client.use(fn)` (not wrapped in an
+`HttpPlugin`) defaults to `PluginOrder.normalize`, **not** `PluginOrder.recover`'s slot
+(`0`) — an unadorned `client.use(fn)` must not silently interleave with recovery retries
+purely by registration order.
 
 ### 2.5 `meta`
 
 ```ts
 export interface HttpMeta {
-  auth?: boolean; // false → authPlugin skips this request
-  mapError?: boolean; // false → errorMapperPlugin leaves the error untouched
-  refresh?: boolean; // false → refreshPlugin will not attempt refresh
+  auth?: boolean; // conventional name for a caller's own auth() `skip` predicate to check — not read automatically
+  mapError?: boolean; // false → errorMapper leaves the error untouched (read automatically)
+  recover?: boolean; // conventional name for a caller's own shouldRecover to check — not read automatically
   [key: string]: unknown;
+  [key: symbol]: unknown;
 }
 ```
 
-Plugin-internal state (e.g. a retry-attempt counter, reserved for v1.1) must use
+`mapError` is the only flag `errorMapper` reads itself. `auth`/`recover` are _not_ read
+automatically by `auth()`/`recover()` as of v3 — both plugins are fully generic
+(`options.skip`/`shouldRecover`), so a per-request opt-out is expressed by composing it
+into that callback yourself, e.g. `shouldRecover: (ctx) => ctx.request.meta.recover !== false && onStatus(401)(ctx)`.
+The field names remain a documented convention for doing so.
+
+Plugin-internal state (e.g. `recover()`'s attempt/generation counters) must use
 `Symbol.for('lamstack.http.*')` keys, never plain strings, so it can never collide with
 a consumer's own `meta` entries.
 
@@ -211,7 +236,10 @@ export interface HttpClientOptions {
   headers?: HeadersInput;
   timeout?: number;
   credentials?: 'omit' | 'same-origin' | 'include';
+  responseType?: ResponseType;
   paramsSerializer?: (params: QueryParams) => string;
+  /** Strategy for appending non-primitive values to the FormData built by upload(). Defaults to WebFileSerializer. */
+  fileSerializer?: FileSerializer;
 }
 
 export class HttpClient {
@@ -248,7 +276,13 @@ export class HttpClient {
   ): Promise<T>;
   download(url: string, init?: HttpRequestInit): Promise<Blob>;
 
-  /** New client inheriting the parent's middleware/options — used to build a refresh-only client with no auth/refresh plugins attached. */
+  /**
+   * New client inheriting the parent's middleware/options — used to build a recovery-only
+   * client with no auth/recover plugins attached (typically what a `recover()` callback
+   * calls internally to reach the refresh endpoint). Every field falls back via `??`, so
+   * an explicit `undefined` can't unset an inherited value, and `headers` is replaced
+   * wholesale rather than merged with the parent's — both documented on the method itself.
+   */
   extend(options: Partial<HttpClientOptions>): HttpClient;
 }
 
@@ -286,37 +320,69 @@ Per SPEC v1 (interview-confirmed): `axios.create({ adapter: 'fetch' })` existing
 change this design — `axiosAdapter` treats the axios instance as an opaque black box
 regardless of what it uses internally for transport.
 
-**Adapter contract test suite** — one scripted scenario set run against both adapters,
-proving they're interchangeable (v1 scenarios only; progress-specific scenarios deferred
-to v1.1 alongside the feature):
+**Adapter contract test suite** (`adapters/contract.test-kit.ts`) — one scripted scenario
+set run against both adapters against a real local HTTP server, proving they're
+interchangeable (v1 scenarios only; progress-specific scenarios deferred to v1.1
+alongside the feature):
 
 ```
 200 JSON · 200 text · 204 No Content · 404 + JSON body · 500 + HTML body
-network error · timeout · abort before request · abort during request
-invalid JSON · lowercase response headers · responseType: blob
+network error · timeout (including a timeout that elapses mid-body-read) · abort before
+request · abort during request · invalid JSON on a 2xx (PARSE_ERROR) · a non-2xx response
+whose body fails to parse still throws HTTP_ERROR with the raw text as data, not
+PARSE_ERROR · lowercase response headers · responseType: 'blob' (including Content-Type
+preserved on the Blob) · binary request body (Uint8Array) sent raw, not JSON-stringified ·
+responseType: 'stream' throws a clear error, since capabilities.stream is false
 ```
 
 ## 5. Ported Behavior (parity checklist against `omni.com/dashboard/src/lib/http-client`)
 
-| Old (axios-only)                                                                   | New (adapter-agnostic)                                                                                                                                                                                                                                                              |
-| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HttpClient` (get/post/put/delete/patch/upload/download/createCancelable)          | `HttpClient` core class + standalone `cancelable()` helper                                                                                                                                                                                                                          |
-| Request interceptor (bearer header)                                                | `authPlugin(tokenProvider)` at `PluginOrder.auth`                                                                                                                                                                                                                                   |
-| Response interceptor (401 → refresh → queue → retry)                               | `refreshPlugin(options)` at `PluginOrder.refresh`, using re-entrant `next()` instead of `dispatch()`                                                                                                                                                                                |
-| `TokenProvider` interface                                                          | Same contract, renamed: `bearer`→`getAccessToken`, `persist`→`saveTokens`, `refreshable`→`canRefresh`, `configure`→`decorate`, `prepareRefresh`→`buildRefreshRequest`                                                                                                               |
-| `LocalStorageTokenProvider`, `CookieHttpOnlyTokenProvider`                         | Ported with renamed methods — already storage-agnostic via `Storage`, no axios coupling to remove                                                                                                                                                                                   |
-| `DefaultTokenRefreshPolicy`                                                        | `defaultRefreshPolicy({ statuses?, excludePaths? })`, same 401-only + excluded-paths behavior                                                                                                                                                                                       |
-| `isRefreshing` + `failedQueue`                                                     | Same algorithm inside `refreshPlugin`'s closure; **on refresh failure, each queued request now rejects with its own original error**, with the refresh error attached via `.cause` (improvement over the old code, which rejected every queued request with the same refresh error) |
-| `HttpEventBus` ('unauthorized'/'forbidden')                                        | Typed `HttpEventBus` + `HttpEventMap` (`unauthorized`, `token:refreshed`, `token:refresh-failed`)                                                                                                                                                                                   |
-| `HttpError` (status/code/data, `isNetworkError`)                                   | Ported into core as part of the adapter contract, `+isCanceled`, `.cause`, `HttpError.is()`/`.from()`                                                                                                                                                                               |
-| `ErrorNormalizer`/`ErrorHandler`                                                   | `errorMapperPlugin(map)` — maps server error payloads only; transport-level normalization is now the adapter's job (§2.2), not the plugin's                                                                                                                                         |
-| `FormBuilder` + `FileSerializer` + `WebFileSerializer`/`ReactNativeFileSerializer` | Ported as-is into `serializers/` — pure Web API, no axios coupling                                                                                                                                                                                                                  |
-| `createCancelable`                                                                 | `cancelable()` standalone helper (§3)                                                                                                                                                                                                                                               |
-| (new) separate `authClient` to avoid interceptor loops                             | `client.extend({...})` producing a client with no auth/refresh plugins, passed as `refreshPlugin`'s `refreshClient`                                                                                                                                                                 |
+| Old (axios-only)                                                                   | New (adapter-agnostic)                                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HttpClient` (get/post/put/delete/patch/upload/download/createCancelable)          | `HttpClient` core class + standalone `cancelable()` helper                                                                                                                                                                                                                                                                          |
+| Request interceptor (bearer header)                                                | `auth(bearer(source))` at `PluginOrder.auth` — see §5.1                                                                                                                                                                                                                                                                             |
+| Response interceptor (401 → refresh → queue → retry)                               | `recover(options)` at `PluginOrder.recover`, using re-entrant `next()` instead of `dispatch()` — see §5.1                                                                                                                                                                                                                           |
+| `TokenProvider` interface                                                          | Unchanged as of v3 — still exported, still the shape both shipped strategies implement; see §5.1 for how it now plugs into `auth()`/`recover()`                                                                                                                                                                                     |
+| `LocalStorageTokenProvider`, `CookieHttpOnlyTokenProvider`                         | Unchanged as of v3 (§5.1) — `tokenSession()`/`TokenStore`, meant to eventually replace both, is deferred (§1)                                                                                                                                                                                                                       |
+| `DefaultTokenRefreshPolicy`                                                        | `onStatus(401, { exclude? })` — same 401-only + excluded-paths behavior, now `recover()`'s `shouldRecover` default instead of a `TokenProvider`-coupled policy type                                                                                                                                                                 |
+| `isRefreshing` + `failedQueue`                                                     | Same algorithm inside `recover()`'s closure, plus a generation counter (§5.1) so a request that fails after a _different_ request's cycle already rotated the credential retries directly instead of starting a redundant cycle; each queued request still rejects with its own original error, refresh error attached via `.cause` |
+| `HttpEventBus` ('unauthorized'/'forbidden')                                        | Generic `EventBus<TMap>` (§5.1) — `recover()` defines its own `RecoveryEventMap` (`recovery:succeeded`/`recovery:failed`/`recovery:unavailable`); core no longer knows about tokens at the type level                                                                                                                               |
+| `HttpError` (status/code/data, `isNetworkError`)                                   | Ported into core as part of the adapter contract, `+isCanceled`, `.cause` (non-enumerable, matching native `Error.cause`), `HttpError.is()`/`.from()` (`'UNKNOWN'` code for anything not recognizably a transport failure — see §2.2)                                                                                               |
+| `ErrorNormalizer`/`ErrorHandler`                                                   | `errorMapper(map)` — maps server error payloads only; transport-level normalization is now the adapter's job (§2.2), not the plugin's                                                                                                                                                                                               |
+| `FormBuilder` + `FileSerializer` + `WebFileSerializer`/`ReactNativeFileSerializer` | Ported as-is into `serializers/` — pure Web API, no axios coupling                                                                                                                                                                                                                                                                  |
+| `createCancelable`                                                                 | `cancelable()` standalone helper (§3)                                                                                                                                                                                                                                                                                               |
+| (new) separate `authClient` to avoid interceptor loops                             | `client.extend({...})` producing a client with no auth/recovery plugins, typically what a `recover()` callback calls internally                                                                                                                                                                                                     |
+
+### 5.1 v3: `auth`/`refresh` → `Authenticator`/`recover` (SPEC v2 → v3 migration map)
+
+`TokenProvider` had six methods serving two unrelated consumers (`auth` used
+`getAccessToken`/`decorate`; `refresh` used the other four) — the intersection was empty.
+v3 splits this into two narrow, independent contracts; `TokenProvider` and both shipped
+strategies are unchanged and still slot into the new plugins directly, since
+`TokenProvider.getAccessToken()` alone satisfies `bearer()`'s source contract.
+
+| v2                                                                                        | v3                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth(provider, { header, scheme })`                                                      | `auth(bearer(source, { header, scheme }))` — `Authenticator = (req) => Awaitable<HttpRequest>`; presets: `bearer`, `apiKey`, `basic`, `allOf`                                                                                                                                                     |
+| `TokenProvider.decorate` (called by `auth` before the header)                             | Deleted from the call path — `auth()` no longer calls it. A cookie strategy sets `credentials: 'include'` on `HttpClientOptions` instead (was a real bug in v2: `decorate` ran _after_ the `meta.auth === false` skip check, so an opted-out request also silently lost `credentials: 'include'`) |
+| `refresh({ tokenProvider, refreshClient, shouldRefresh, ... })`                           | `recover({ recover, canRecover?, shouldRecover?, maxAttempts?, events? })` — `recover: (context) => Promise<void>` is the only required contract; the callback decides how renewal happens (an HTTP request, `firebaseUser.getIdToken(true)`, a BroadcastChannel resync, ...)                     |
+| `defaultRefreshPolicy({ statuses?, excludePaths? })`                                      | `onStatus(status, { exclude? })` — `recover()`'s `shouldRecover` default                                                                                                                                                                                                                          |
+| `HttpMeta.refresh`                                                                        | `HttpMeta.recover` — neither this nor `HttpMeta.auth` is read automatically anymore; a per-request opt-out is composed into `shouldRecover`/`options.skip` yourself (§2.5)                                                                                                                        |
+| `refresh` plugin auto-calling `tokenProvider.clear()` on failure/`canRefresh() === false` | `recover()` calls no cleanup itself — it only emits `recovery:failed`/`recovery:unavailable`; the consumer wires `events.on('recovery:failed', () => provider.clear())`                                                                                                                           |
+| `HttpEventBus` (`unauthorized`/`token:refreshed`/`token:refresh-failed`)                  | `EventBus<RecoveryEventMap>` (`recovery:succeeded`/`recovery:failed`/`recovery:unavailable`) — no `unauthorized` event; `recovery:unavailable` covers the old `canRefresh() === false` case                                                                                                       |
+| (new in v3) redundant cycle for a stale in-flight request                                 | A generation counter in `recover()`: bumped each time a cycle succeeds; a request whose failure is caught with an older generation than current retries directly via `next()` instead of starting another cycle                                                                                   |
+
+**Deferred, not implemented:** `tokenSession()`/`TokenStore` — the session layer sketched
+as the eventual replacement for `LocalStorageTokenProvider`/`CookieHttpOnlyTokenProvider`.
+Its exact shape (key naming, `canRenew` default, what `TokenStore` looks like beyond "a
+`Storage`-like thing") is underspecified and needs a decision before implementing, not an
+invented one. Both shipped `TokenProvider` strategies remain fully supported via
+`auth(bearer(provider))` in the meantime.
 
 ## 6. Commands
 
-No deviation from the repo convention (see `packages/initializer`):
+No deviation from the repo convention (see `packages/initializer`), plus a second
+`tsconfig` pass so the DOM-leakage gate (§9) actually runs, not just when invoked by hand:
 
 ```json
 {
@@ -325,7 +391,7 @@ No deviation from the repo convention (see `packages/initializer`):
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.nodom.json"
   }
 }
 ```
@@ -333,21 +399,22 @@ No deviation from the repo convention (see `packages/initializer`):
 ## 7. Project Structure
 
 ```
-packages/http/
+packages/http-client/
   src/
     core/
-      types.ts              # HttpRequestInit, HttpRequest, HttpResponse, HttpMeta, Middleware, HttpPlugin, PluginOrder
+      types.ts              # HttpRequestInit, HttpRequest, HttpResponse, HttpMeta, Middleware, HttpPlugin, PluginOrder, AdapterCapabilities, Awaitable
       resolve.ts             # HttpRequestInit -> HttpRequest resolution (§2.1 rules table)
       pipeline.ts             # compose() — onion execution with re-entrant next()
       http-error.ts            # HttpError
-      http-event-bus.ts         # HttpEventBus + HttpEventMap
+      event-bus.ts               # generic EventBus<TMap>
       client.ts                  # HttpClient: use/request/get.../upload/download/extend
       cancelable.ts                # standalone cancelable() helper
     plugins/
-      auth.plugin.ts
-      refresh.plugin.ts             # includes defaultRefreshPolicy, RefreshPolicy type
+      auth.plugin.ts                 # Authenticator type, auth() plugin
+      authenticators.ts               # bearer/apiKey/basic/allOf presets
+      recover.plugin.ts                # recover() plugin, onStatus(), RecoveryEventMap
       error-mapper.plugin.ts
-      token-provider.ts               # TokenProvider interface
+      token-provider.ts                  # TokenProvider interface (unchanged, §5.1)
       local-storage-token.provider.ts
       cookie-token.provider.ts
     serializers/
@@ -356,9 +423,10 @@ packages/http/
       native-file.serializer.ts
       form-builder.ts
     adapters/
-      fetch.adapter.ts                  # subpath export: @lamstack/http/adapters/fetch
-      axios.adapter.ts                   # subpath export: @lamstack/http/adapters/axios
+      fetch.adapter.ts                  # subpath export: @lamstack/http-client/adapters/fetch
+      axios.adapter.ts                   # subpath export: @lamstack/http-client/adapters/axios
       contract.test-kit.ts                 # shared scenario suite, imported by both adapters' tests
+    integration.test.ts                     # full auth+recover+errorMapper stack against a real adapter
     index.ts                                # core + plugins + serializers — NOT adapters
   package.json
   tsconfig.json
@@ -377,14 +445,17 @@ No deviation from `eslint.config.js`/`tsconfig.base.json`. One addition:
 
 ```js
 {
-  // @lamstack/http core/plugins/serializers must not import a transport library directly.
-  files: ['packages/http/src/**/*.{ts,tsx}'],
+  // @lamstack/http-client core/plugins/serializers must not import a transport library directly.
+  files: ['packages/http-client/src/**/*.{ts,tsx}'],
   rules: {
     'no-restricted-imports': ['error', { paths: ['axios'] }],
   },
 },
 {
-  files: ['packages/http/src/adapters/axios.adapter.ts'],
+  files: [
+    'packages/http-client/src/adapters/axios.adapter.ts',
+    'packages/http-client/src/adapters/axios.adapter.test.ts',
+  ],
   rules: { 'no-restricted-imports': 'off' },
 },
 ```
@@ -403,20 +474,30 @@ Verified the same way as `packages/initializer`'s boundary rule: intentionally i
   twice — this is the regression test for the bug the v2 redesign fixes.
 - **Mock adapter** (`HttpAdapter` test double, scripted responses/errors) for all
   plugin/client tests not specifically about a real adapter.
-- **Refresh-queue concurrency** — highest-risk logic, dedicated tests using the
+- **Recovery-cycle concurrency** — highest-risk logic, dedicated tests using the
   `deferred()`-promise pattern from `packages/initializer/src/runner.test.ts`:
-  - N concurrent 401s → exactly one refresh call, all N retry successfully.
-  - Refresh fails → each queued request rejects with **its own** original error,
-    refresh error attached via `.cause` (not a shared rejection value — this is the
+  - N concurrent 401s → exactly one recovery call, all N retry successfully.
+  - Recovery fails → each queued request rejects with **its own** original error,
+    the recovery error attached via `.cause` (not a shared rejection value — this is the
     parity-improving change over the old dashboard code, verify it explicitly).
-  - A request after refresh already resolved doesn't join a stale queue.
-  - `excludePaths`/refresh-endpoint requests never trigger a refresh loop.
+  - A request after a cycle already resolved doesn't join a stale queue.
+  - A request whose failure is caught with an older generation than current (§5.1) retries
+    directly instead of starting a redundant cycle — the race a _different_ request's
+    already-completed rotation can cause.
+  - `exclude`/recovery-endpoint requests never trigger a recovery loop.
+  - `auth()` re-runs inside `recover()`'s retry (order 100 sits inside order 0) — explicit
+    test, not just an architectural claim.
 - **Adapter contract suite** (§4) run once per adapter, asserting identical
   `HttpResponse`/`HttpError` shape for the same scripted exchange — this is what proves
   adapter-agnosticism, not the architecture diagram.
+- **Integration test** (`integration.test.ts`): the full `auth` + `recover` + `errorMapper`
+  stack against a real local HTTP server via `fetchAdapter()`, not the mock adapter — the
+  adapter-parity suite proves each adapter's own behavior in isolation; this proves the
+  plugins interact correctly with what a real adapter actually throws.
 - **`tsconfig.nodom.json` build check**: compiling `src/index.ts` alone against
   `lib: ["ES2022"]` (no DOM) must succeed — proves the root entry never leaks
   `fetch`/DOM/axios types, catching what the eslint rule alone wouldn't (type-only leaks).
+  Wired into the package's own `typecheck` script (§6), not just runnable by hand.
 - **Serializer tests** (`FormBuilder`, `WebFileSerializer`, `NativeFileSerializer`) — new
   coverage; none exists in the source implementation today.
 
@@ -424,13 +505,13 @@ Verified the same way as `packages/initializer`'s boundary rule: intentionally i
 
 **Always do:**
 
-- Keep `packages/http/src/index.ts` (and everything under `core/`, `plugins/`,
+- Keep `packages/http-client/src/index.ts` (and everything under `core/`, `plugins/`,
   `serializers/`) free of any `axios`/`fetch`-specific import — enforced by §8's lint
   rule and §9's `tsconfig.nodom.json` check, not just review.
 - Ship every version change through a `.changeset/*.md` file — never hand-edit
   `package.json`'s `version`.
-- Give `authPlugin`/`refreshPlugin` no capability a third-party plugin couldn't
-  replicate using the public `Middleware`/`HttpPlugin`/`PluginOrder` contract.
+- Give `auth`/`recover` no capability a third-party plugin couldn't replicate using the
+  public `Middleware`/`HttpPlugin`/`PluginOrder` contract.
 - Keep v1.1-reserved surface (`PluginOrder.retry`, `AdapterCapabilities` fields) present
   but honestly inert in v1 — don't half-implement retry/progress.
 
@@ -439,14 +520,16 @@ Verified the same way as `packages/initializer`'s boundary rule: intentionally i
 - Any change to `HttpRequest`/`Middleware`/`HttpAdapter`/`PluginOrder` once this ships
   `1.0.0` — these are the contract every plugin and adapter is built against.
 - Adding a new subpath export, a new first-party plugin beyond
-  `auth`/`refresh`/`error-mapper`, or starting v1.1 (`retryPlugin`, progress) work.
+  `auth`/`recover`/`error-mapper`, or starting v1.1 (`retryPlugin`, progress) work.
 - Creating any additional `@lamstack/*` package.
+- Implementing `tokenSession()`/`TokenStore` (§1, §5.1) — the shape needs a decision
+  first, not an invented one.
 
 **Never do:**
 
 - Never add `axios` or a `fetch` polyfill as a non-optional dependency of the package
   root / `core`.
-- Never special-case the built-in `auth`/`refresh` plugins in `HttpClient` internals in a
+- Never special-case the built-in `auth`/`recover` plugins in `HttpClient` internals in a
   way a user-authored plugin couldn't also do.
 - Never re-enter the pipeline from the top for retry (the v1-draft bug) — retry is
   always a second `next()` call from within the retrying middleware.
@@ -462,3 +545,6 @@ Verified the same way as `packages/initializer`'s boundary rule: intentionally i
   (`'throw' | 'warn' | 'ignore'`).
 - SSE plugin (deferred since the original interview — architecture must support it,
   implementation does not exist).
+- `tokenSession()`/`TokenStore` (§1, §5.1) — deferred pending a concrete design, not a
+  scope decision like the items above; `LocalStorageTokenProvider`/
+  `CookieHttpOnlyTokenProvider` remain the supported path until it lands.

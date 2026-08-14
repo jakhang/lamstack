@@ -9,9 +9,8 @@ on top via a single `.use()` API. No plugin shipped with this package — not `a
 
 > **Pre-1.0** (`0.x`): the API may still change between minor versions. `retryPlugin` and
 > upload/download progress are architected for (see [`PluginOrder`](#pluginorder) and
-> `HttpAdapter.capabilities`) but not implemented yet — see
-> [SPEC.md §11](./SPEC.md#11-deferred-to-v11-explicitly-not-built-now) for what's coming
-> in v1.1.
+> `HttpAdapter.capabilities`) but not implemented yet — see [Roadmap](#roadmap) for
+> what's coming next.
 
 ## Table of contents
 
@@ -820,8 +819,7 @@ result.
 
 ## Roadmap
 
-Not yet implemented — see [SPEC.md §11](./SPEC.md#11-deferred-to-v11-explicitly-not-built-now)
-for the full rationale:
+Not yet implemented:
 
 - **`retryPlugin`** — backoff/jitter, `Retry-After` support, method-safety rules (no
   automatic retry of non-idempotent requests). `PluginOrder.retry` is already reserved.
@@ -838,12 +836,21 @@ for the full rationale:
 ## Credits
 
 This package generalizes a production `HttpClient` implementation (axios-only) from an
-internal dashboard into an adapter-agnostic, publicly reusable one — see
-[SPEC.md §5](./SPEC.md#5-ported-behavior-parity-checklist-against-omnicomdashboardsrclibhttp-client)
-for the full parity checklist against that original implementation, including the
-deliberate behavior improvements made along the way (per-request error identity on a
-failed shared recovery cycle, `extend()` replacing a manually-constructed second client,
-and the `Authenticator`/`recover()` split documented in SPEC.md §5.1).
+internal dashboard into an adapter-agnostic, publicly reusable one, keeping full behavior
+parity with the original (`HttpClient`'s verb methods, request/response interceptors,
+`TokenProvider`, `FormBuilder`/`FileSerializer`, `createCancelable`) while making three
+deliberate improvements along the way:
+
+- **Per-request error identity on a failed shared recovery cycle** — every request
+  queued behind an in-flight `recover()` cycle rejects with its own original error (the
+  recovery failure attached via `.cause`), not one shared rejection value across all of
+  them.
+- **`extend()`** replaces a manually-constructed second client for talking to the refresh
+  endpoint without recursing into its own recovery logic.
+- **The `Authenticator`/`recover()` split** — the original's monolithic token-provider
+  interface is now two narrow, independent contracts (see
+  [Authentication and recovery](#authentication-and-recovery)), so credential attachment
+  and failure recovery are useful — and testable — on their own.
 
 ## License
 

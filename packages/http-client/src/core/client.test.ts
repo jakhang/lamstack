@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchAdapter } from '../adapters/fetch.adapter';
 import { HttpClient } from './client';
+import * as pipelineModule from './pipeline';
 import type { HttpAdapter, HttpHeaders, HttpRequest, HttpResponse } from './types';
 
 function captureFetch() {
@@ -108,6 +109,36 @@ describe('HttpClient — use()', () => {
     await client.get('/b');
 
     expect(ran).toBe(2);
+  });
+
+  it('a plugin registered after some requests already went through still runs on later requests', async () => {
+    const client = new HttpClient({ adapter: fakeAdapter(() => ({ data: null })) });
+    await client.get('/a');
+
+    let ran = 0;
+    client.use(async (request, next) => {
+      ran += 1;
+      return next(request);
+    });
+    await client.get('/b');
+
+    expect(ran).toBe(1);
+  });
+
+  it('memoizes the composed pipeline instead of rebuilding it on every request, invalidating only on use()', async () => {
+    const composeSpy = vi.spyOn(pipelineModule, 'compose');
+    const client = new HttpClient({ adapter: fakeAdapter(() => ({ data: null })) });
+
+    await client.get('/a');
+    await client.get('/b');
+    expect(composeSpy.mock.calls.length).toBe(1);
+
+    client.use(async (request, next) => next(request));
+    await client.get('/c');
+    await client.get('/d');
+    expect(composeSpy.mock.calls.length).toBe(2);
+
+    composeSpy.mockRestore();
   });
 });
 

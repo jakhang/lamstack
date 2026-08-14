@@ -27,6 +27,8 @@ export class HttpClient {
   private readonly plugins: (Middleware | HttpPlugin)[];
   private readonly fileSerializer: FileSerializer;
   private readonly formBuilder: FormBuilder;
+  /** The composed pipeline, built lazily and cached across requests — invalidated in `use()`. */
+  private pipeline: Next | null = null;
 
   constructor(options: HttpClientOptions, plugins: readonly (Middleware | HttpPlugin)[] = []) {
     const { adapter, fileSerializer, ...defaults } = options;
@@ -39,14 +41,21 @@ export class HttpClient {
 
   use(plugin: Middleware | HttpPlugin): this {
     this.plugins.push(plugin);
+    this.pipeline = null;
     return this;
+  }
+
+  private getPipeline(): Next {
+    if (!this.pipeline) {
+      const terminal: Next = (req) => this.adapter.send(req) as Promise<HttpResponse>;
+      this.pipeline = compose(this.plugins, terminal);
+    }
+    return this.pipeline;
   }
 
   async request<T = unknown>(init: HttpRequestInit): Promise<HttpResponse<T>> {
     const request = resolve(init, this.defaults);
-    const terminal: Next = (req) => this.adapter.send<T>(req) as Promise<HttpResponse>;
-    const run = compose(this.plugins, terminal);
-    return run(request) as Promise<HttpResponse<T>>;
+    return this.getPipeline()(request) as Promise<HttpResponse<T>>;
   }
 
   async get<T = unknown>(url: string, init?: VerbInit): Promise<T> {

@@ -1,4 +1,4 @@
-  import type { HttpPlugin, HttpRequest, HttpResponse, Middleware, Next } from './types';
+import type { HttpPlugin, HttpRequest, HttpResponse, Middleware, Next } from './types';
 
 function isHttpPlugin(entry: Middleware | HttpPlugin): entry is HttpPlugin {
   return typeof entry !== 'function';

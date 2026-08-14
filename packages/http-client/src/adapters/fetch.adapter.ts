@@ -73,6 +73,10 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
     name: 'fetch',
     capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
     async send<T = unknown>(request: HttpRequest): Promise<HttpResponse<T>> {
+      if (request.responseType === 'stream') {
+        throw new Error("fetchAdapter does not support responseType: 'stream' (capabilities.stream is false)");
+      }
+
       const outgoingHeaders: Record<string, string> = { ...request.headers };
       const body = toBodyInit(request.body, outgoingHeaders);
 

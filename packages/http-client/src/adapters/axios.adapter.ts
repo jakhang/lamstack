@@ -70,6 +70,10 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
     name: 'axios',
     capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
     async send<T = unknown>(request: HttpRequest): Promise<HttpResponse<T>> {
+      if (request.responseType === 'stream') {
+        throw new Error("axiosAdapter does not support responseType: 'stream' (capabilities.stream is false)");
+      }
+
       // Own the timeout via AbortController rather than axios's `timeout` option: once a
       // response starts streaming, axios's internal timeout destroys the response stream and
       // surfaces it as a generic ERR_BAD_RESPONSE ("stream has been aborted"), not

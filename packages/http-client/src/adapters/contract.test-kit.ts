@@ -206,6 +206,12 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
       expect((response.data as Blob).type).toBe('application/octet-stream');
     });
 
+    it("responseType: 'stream' throws a clear error, since capabilities.stream is false", async () => {
+      await expect(adapter.send(req({ url: '/json', responseType: 'stream' }))).rejects.toThrow(
+        "does not support responseType: 'stream' (capabilities.stream is false)",
+      );
+    });
+
     it('sends a binary body as raw bytes, not JSON-stringified', async () => {
       const response = await adapter.send(
         req({ url: '/echo-body', method: 'POST', body: new Uint8Array([1, 2, 3]), responseType: 'arrayBuffer' }),

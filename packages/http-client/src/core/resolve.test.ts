@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { resolve } from './resolve';
 
 describe('resolve — baseURL', () => {
-  it('combines a relative url with baseURL via new URL semantics', () => {
+  it('combines a relative url with baseURL, preserving the baseURL path prefix (axios-style, not literal `new URL()` semantics)', () => {
     const req = resolve({ url: '/users' }, { baseURL: 'https://a.com/api' });
     expect(req.url).toBe('https://a.com/api/users');
   });

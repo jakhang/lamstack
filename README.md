@@ -20,12 +20,13 @@ pnpm add @lamstack/react-dialog
 
 ## Packages
 
-| Package | Description |
-| --- | --- |
-| [`@lamstack/react-core`](./packages/react-core) | Shared internal-ish hooks other `@lamstack/react-*` packages build on. Usable standalone. |
-| [`@lamstack/react-dialog`](./packages/react-dialog) | Headless, imperative dialog API (`useDialogs()` → `open`/`close`/`alert`/`confirm`/`prompt`). |
-| [`@lamstack/initializer`](./packages/initializer) | Framework-agnostic app-startup orchestrator core (`createInitializer`, `parallel`, task/state types). No React dependency. |
-| [`@lamstack/react-initializer`](./packages/react-initializer) | React adapter for `@lamstack/initializer` (`<Initializer>`, `useInitializer()`, splash/error screens), re-exporting the whole core API from one import. |
+| Package                                                       | Description                                                                                                                                                               |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@lamstack/react-core`](./packages/react-core)               | Shared internal-ish hooks other `@lamstack/react-*` packages build on. Usable standalone.                                                                                 |
+| [`@lamstack/react-dialog`](./packages/react-dialog)           | Headless, imperative dialog API (`useDialogs()` → `open`/`close`/`alert`/`confirm`/`prompt`).                                                                             |
+| [`@lamstack/initializer`](./packages/initializer)             | Framework-agnostic app-startup orchestrator core (`createInitializer`, `parallel`, task/state types). No React dependency.                                                |
+| [`@lamstack/react-initializer`](./packages/react-initializer) | React adapter for `@lamstack/initializer` (`<Initializer>`, `useInitializer()`, splash/error screens), re-exporting the whole core API from one import.                   |
+| [`@lamstack/http-client`](./packages/http-client)             | Framework-agnostic HTTP client core with a pluggable middleware pipeline (`auth`/`recover`/`errorMapper` plugins) and fetch/axios adapters. No hard dependency on either. |
 
 More packages (data, non-React targets, ...) are planned, following the same
 `@lamstack/<target>-<domain>` naming pattern — no new scopes.

@@ -89,19 +89,19 @@ type QueryValue = string | number | boolean | Date | null | undefined;
 
 **Resolution rules — each is a public contract and gets a dedicated test:**
 
-| Rule              | Behavior                                                       |
-| ----------------- | -------------------------------------------------------------- |
-| `baseURL`         | `new URL(url, baseURL)`                                        |
-| Absolute URL      | An absolute `http(s)` URL ignores `baseURL` entirely           |
-| Slash handling    | `https://a.com/api` + `users` → `https://a.com/api/users`      |
-| Header precedence | adapter defaults ← client headers ← request headers            |
-| Header deletion   | `null`/`undefined` at a later layer removes the previous value |
-| Header case       | All keys normalized to lowercase                               |
-| Header collision  | Keys equal after lowercasing overwrite earlier values          |
-| Params            | `null`/`undefined` values omitted                              |
-| Array params      | Repeat the key: `id=1&id=2`                                    |
-| Date params       | Serialized as ISO strings                                      |
-| Existing query    | `/x?a=1` + `{ b: 2 }` → `/x?a=1&b=2`                           |
+| Rule              | Behavior                                                                                                                                                                                                 |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseURL`         | Axios-style join: strips `url`'s leading `/` before combining, so the `baseURL` path prefix is preserved — not literal `new URL(url, baseURL)` semantics, which would drop it for an absolute-path `url` |
+| Absolute URL      | An absolute `http(s)` URL ignores `baseURL` entirely                                                                                                                                                     |
+| Slash handling    | `https://a.com/api` + `users` → `https://a.com/api/users`                                                                                                                                                |
+| Header precedence | adapter defaults ← client headers ← request headers                                                                                                                                                      |
+| Header deletion   | `null`/`undefined` at a later layer removes the previous value                                                                                                                                           |
+| Header case       | All keys normalized to lowercase                                                                                                                                                                         |
+| Header collision  | Keys equal after lowercasing overwrite earlier values                                                                                                                                                    |
+| Params            | `null`/`undefined` values omitted                                                                                                                                                                        |
+| Array params      | Repeat the key: `id=1&id=2`                                                                                                                                                                              |
+| Date params       | Serialized as ISO strings                                                                                                                                                                                |
+| Existing query    | `/x?a=1` + `{ b: 2 }` → `/x?a=1&b=2`                                                                                                                                                                     |
 
 ### 2.2 Response and Error
 

@@ -243,11 +243,15 @@ const client = new HttpClient({ adapter: fetchAdapter() });
 const testClient = new HttpClient({ adapter: fetchAdapter({ fetch: myFetch }) });
 ```
 
-Wraps global `fetch`. Handles JSON/FormData/Blob/string/URLSearchParams/ArrayBuffer
-bodies automatically (sets `content-type: application/json` only when it has to
-JSON-stringify a plain object — never for `FormData`, so multipart uploads keep their
-browser/Node-generated boundary). Combines your `signal` with an internal
-timeout-derived one via `AbortSignal.any(...)`.
+Wraps global `fetch`. Handles JSON/FormData/Blob/string/ArrayBuffer/typed-array
+(`Uint8Array`, `DataView`, ...)/URLSearchParams/`ReadableStream` bodies automatically
+(sets `content-type: application/json` only when it has to JSON-stringify a plain
+object — never for `FormData`, so multipart uploads keep their browser/Node-generated
+boundary). Combines your `signal` with an internal timeout-derived one via
+`AbortSignal.any(...)`, which needs **Node 20.3+ or Safari 17.4+** — narrower than this
+package's own `engines.node: ">=20"`. Chrome/Firefox/Edge have supported it since 2023;
+if you must support Node 20.0–20.2 or an older Safari, polyfill `AbortSignal.any` before
+constructing the adapter.
 
 ### `axiosAdapter()`
 

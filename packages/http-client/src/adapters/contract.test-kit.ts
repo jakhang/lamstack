@@ -45,6 +45,14 @@ const routes: Record<string, Route> = {
     res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
     res.end(Buffer.from([1, 2, 3, 4]));
   },
+  '/echo-body': (req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+      res.end(Buffer.concat(chunks));
+    });
+  },
 };
 
 async function listen(server: ReturnType<typeof createServer>): Promise<number> {
@@ -164,6 +172,13 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
       const response = await adapter.send(req({ url: '/blob', responseType: 'blob' }));
       expect(response.data).toBeInstanceOf(Blob);
       expect((response.data as Blob).size).toBe(4);
+    });
+
+    it('sends a binary body as raw bytes, not JSON-stringified', async () => {
+      const response = await adapter.send(
+        req({ url: '/echo-body', method: 'POST', body: new Uint8Array([1, 2, 3]), responseType: 'arrayBuffer' }),
+      );
+      expect(new Uint8Array(response.data as ArrayBuffer)).toEqual(new Uint8Array([1, 2, 3]));
     });
   });
 }

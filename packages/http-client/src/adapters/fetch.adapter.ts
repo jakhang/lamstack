@@ -12,9 +12,11 @@ function toBodyInit(body: unknown, headers: Record<string, string>): BodyInit | 
     body instanceof FormData ||
     body instanceof Blob ||
     body instanceof URLSearchParams ||
-    body instanceof ArrayBuffer
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body) ||
+    body instanceof ReadableStream
   ) {
-    return body;
+    return body as BodyInit;
   }
   if (!('content-type' in headers)) {
     headers['content-type'] = 'application/json';

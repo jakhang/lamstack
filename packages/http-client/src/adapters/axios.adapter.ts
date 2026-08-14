@@ -32,24 +32,35 @@ function normalizeHeaders(headers: AxiosResponse['headers']): HttpHeaders {
   return result;
 }
 
-function parseBody(responseType: ResponseType, raw: unknown, status: number, request: HttpRequest): unknown {
-  try {
-    switch (responseType) {
-      case 'blob':
-        return new Blob([raw as ArrayBuffer]);
-      case 'arrayBuffer':
-      case 'stream':
-        return raw;
-      case 'text':
-        return raw as string;
-      case 'json':
-      default: {
-        const text = raw as string;
-        return text ? JSON.parse(text) : undefined;
+/** Thrown only when a `'json'` body fails `JSON.parse` — carries the raw text so the caller can fall back to it for a non-2xx response. */
+class JsonParseFailure extends Error {
+  readonly cause: unknown;
+
+  constructor(readonly rawText: string, cause: unknown) {
+    super('Failed to parse response body');
+    this.cause = cause;
+  }
+}
+
+function parseBody(responseType: ResponseType, raw: unknown): unknown {
+  switch (responseType) {
+    case 'blob':
+      return new Blob([raw as ArrayBuffer]);
+    case 'arrayBuffer':
+    case 'stream':
+      return raw;
+    case 'text':
+      return raw as string;
+    case 'json':
+    default: {
+      const text = raw as string;
+      if (!text) return undefined;
+      try {
+        return JSON.parse(text);
+      } catch (cause) {
+        throw new JsonParseFailure(text, cause);
       }
     }
-  } catch (cause) {
-    throw new HttpError('Failed to parse response body', { code: 'PARSE_ERROR', status, request, cause });
   }
 }
 
@@ -84,9 +95,25 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
         throw new HttpError('Network Error', { code: 'NETWORK_ERROR', status: 0, request, cause });
       }
 
-      const data = parseBody(request.responseType, axiosResponse.data, axiosResponse.status, request) as T;
+      const ok = axiosResponse.status >= 200 && axiosResponse.status < 300;
+      let data: unknown;
+      try {
+        data = parseBody(request.responseType, axiosResponse.data);
+      } catch (cause) {
+        if (!ok && cause instanceof JsonParseFailure) {
+          data = cause.rawText;
+        } else {
+          throw new HttpError('Failed to parse response body', {
+            code: 'PARSE_ERROR',
+            status: axiosResponse.status,
+            request,
+            cause,
+          });
+        }
+      }
+
       const httpResponse: HttpResponse<T> = {
-        data,
+        data: data as T,
         status: axiosResponse.status,
         statusText: axiosResponse.statusText,
         headers: normalizeHeaders(axiosResponse.headers),
@@ -94,11 +121,11 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
         raw: axiosResponse,
       };
 
-      if (axiosResponse.status < 200 || axiosResponse.status >= 300) {
+      if (!ok) {
         throw new HttpError(axiosResponse.statusText || `Request failed with status ${axiosResponse.status}`, {
           code: 'HTTP_ERROR',
           status: axiosResponse.status,
-          data,
+          data: data as T,
           request,
           response: httpResponse,
         });

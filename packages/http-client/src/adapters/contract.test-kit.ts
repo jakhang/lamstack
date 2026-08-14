@@ -27,6 +27,10 @@ const routes: Record<string, Route> = {
     res.writeHead(500, { 'Content-Type': 'text/html' });
     res.end('<h1>Internal Server Error</h1>');
   },
+  '/server-error-html': (_req, res) => {
+    res.writeHead(500, { 'Content-Type': 'text/html' });
+    res.end('<h1>Broken</h1>');
+  },
   '/slow': (_req, res) => {
     setTimeout(() => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -129,6 +133,17 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
         code: 'HTTP_ERROR',
         status: 500,
       });
+    });
+
+    it('500 + a body that fails to parse as the default (json) responseType still throws HTTP_ERROR with the raw text as data', async () => {
+      const promise = adapter.send(req({ url: '/server-error-html' }));
+      await expect(promise).rejects.toMatchObject({
+        code: 'HTTP_ERROR',
+        status: 500,
+        data: '<h1>Broken</h1>',
+      });
+      const error = await promise.catch((caught: unknown) => caught);
+      expect((error as { response?: unknown }).response).toBeDefined();
     });
 
     it('network error (nothing listening) throws a NETWORK_ERROR HttpError with status 0', async () => {

@@ -32,30 +32,36 @@ function normalizeHeaders(headers: Headers): HttpHeaders {
   return result;
 }
 
-async function parseBody(response: Response, responseType: ResponseType, request: HttpRequest): Promise<unknown> {
-  try {
-    switch (responseType) {
-      case 'blob':
-        return await response.blob();
-      case 'arrayBuffer':
-        return await response.arrayBuffer();
-      case 'text':
-        return await response.text();
-      case 'stream':
-        return response.body;
-      case 'json':
-      default: {
-        const text = await response.text();
-        return text ? JSON.parse(text) : undefined;
+/** Thrown only when a `'json'` body fails `JSON.parse` — carries the raw text so the caller can fall back to it for a non-2xx response. */
+class JsonParseFailure extends Error {
+  readonly cause: unknown;
+
+  constructor(readonly rawText: string, cause: unknown) {
+    super('Failed to parse response body');
+    this.cause = cause;
+  }
+}
+
+async function parseBody(response: Response, responseType: ResponseType): Promise<unknown> {
+  switch (responseType) {
+    case 'blob':
+      return response.blob();
+    case 'arrayBuffer':
+      return response.arrayBuffer();
+    case 'text':
+      return response.text();
+    case 'stream':
+      return response.body;
+    case 'json':
+    default: {
+      const text = await response.text();
+      if (!text) return undefined;
+      try {
+        return JSON.parse(text);
+      } catch (cause) {
+        throw new JsonParseFailure(text, cause);
       }
     }
-  } catch (cause) {
-    throw new HttpError('Failed to parse response body', {
-      code: 'PARSE_ERROR',
-      status: response.status,
-      request,
-      cause,
-    });
   }
 }
 
@@ -98,9 +104,25 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
       }
       clearTimeout(timer);
 
-      const data = (await parseBody(response, request.responseType, request)) as T;
+      const ok = response.status >= 200 && response.status < 300;
+      let data: unknown;
+      try {
+        data = await parseBody(response, request.responseType);
+      } catch (cause) {
+        if (!ok && cause instanceof JsonParseFailure) {
+          data = cause.rawText;
+        } else {
+          throw new HttpError('Failed to parse response body', {
+            code: 'PARSE_ERROR',
+            status: response.status,
+            request,
+            cause,
+          });
+        }
+      }
+
       const httpResponse: HttpResponse<T> = {
-        data,
+        data: data as T,
         status: response.status,
         statusText: response.statusText,
         headers: normalizeHeaders(response.headers),
@@ -108,11 +130,11 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
         raw: response,
       };
 
-      if (response.status < 200 || response.status >= 300) {
+      if (!ok) {
         throw new HttpError(response.statusText || `Request failed with status ${response.status}`, {
           code: 'HTTP_ERROR',
           status: response.status,
-          data,
+          data: data as T,
           request,
           response: httpResponse,
         });

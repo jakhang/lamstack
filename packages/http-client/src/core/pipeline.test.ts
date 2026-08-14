@@ -98,7 +98,7 @@ describe('compose — plugin ordering', () => {
     expect(ran).toEqual(['first', 'second']);
   });
 
-  it('a plain Middleware function (not an HttpPlugin) defaults to order 0', async () => {
+  it('a plain Middleware function (not an HttpPlugin) defaults to order PluginOrder.normalize', async () => {
     const ran: string[] = [];
     const plainMiddleware: Middleware = async (request, next) => {
       ran.push('plain');
@@ -118,5 +118,30 @@ describe('compose — plugin ordering', () => {
     );
 
     expect(ran).toEqual(['observe', 'plain']);
+  });
+
+  it("a plain Middleware runs before an HttpPlugin registered at order 0, regardless of registration order — it isn't in recover()'s slot", async () => {
+    const ran: string[] = [];
+    const plainMiddleware: Middleware = async (request, next) => {
+      ran.push('plain');
+      return next(request);
+    };
+    const orderZeroPlugin: HttpPlugin = {
+      name: 'order-zero',
+      order: 0,
+      handler: async (request, next) => {
+        ran.push('order-zero');
+        return next(request);
+      },
+    };
+
+    // Registered order-zero first, plain second — if the plain middleware still defaulted to
+    // order 0, insertion order would put order-zero first. PluginOrder.normalize (-100) puts
+    // it first regardless.
+    await compose([orderZeroPlugin, plainMiddleware], async (request) => response(request.url))(
+      resolve({ url: '/x' }),
+    );
+
+    expect(ran).toEqual(['plain', 'order-zero']);
   });
 });

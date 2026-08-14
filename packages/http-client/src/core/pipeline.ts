@@ -1,3 +1,4 @@
+import { PluginOrder } from './types';
 import type { HttpPlugin, HttpRequest, HttpResponse, Middleware, Next } from './types';
 
 function isHttpPlugin(entry: Middleware | HttpPlugin): entry is HttpPlugin {
@@ -7,13 +8,16 @@ function isHttpPlugin(entry: Middleware | HttpPlugin): entry is HttpPlugin {
 /**
  * Sorts registered entries by `order` (smaller = further outside the pipeline),
  * preserving `use()` insertion order for entries with equal `order`. A plain
- * `Middleware` function (not wrapped in an `HttpPlugin`) defaults to `order: 0`.
+ * `Middleware` function (not wrapped in an `HttpPlugin`) defaults to
+ * `PluginOrder.normalize` — not `PluginOrder.recover`'s slot (0), so an
+ * innocuous `client.use(fn)` doesn't silently interleave with recovery
+ * retries purely by registration order.
  */
 export function normalizePlugins(entries: readonly (Middleware | HttpPlugin)[]): Middleware[] {
   return entries
     .map((entry, index) => ({
       handler: isHttpPlugin(entry) ? entry.handler : entry,
-      order: isHttpPlugin(entry) ? entry.order : 0,
+      order: isHttpPlugin(entry) ? entry.order : PluginOrder.normalize,
       index,
     }))
     .sort((a, b) => a.order - b.order || a.index - b.index)

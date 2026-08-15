@@ -34,8 +34,7 @@ on top via a single `.use()` API. No plugin shipped with this package — not `a
     - [`auth` and `Authenticator`](#auth-and-authenticator)
     - [Built-in authenticators](#built-in-authenticators)
     - [`recover`](#recover)
-    - [The `TokenProvider` contract and built-in strategies](#the-tokenprovider-contract-and-built-in-strategies)
-    - [`tokenSession()` — a lower-level session primitive](#tokensession--a-lower-level-session-primitive)
+    - [`tokenSession()` — wiring `auth` + `recover` to a token store](#tokensession--wiring-auth--recover-to-a-token-store)
     - [Recovery events (`EventBus`)](#recovery-events-eventbus)
   - [Error handling](#error-handling)
   - [File uploads](#file-uploads)
@@ -348,13 +347,10 @@ const refreshClient = client.extend({}); // no plugins yet — safe to use for t
 
 client.use(
   recover({
-    recover: async () => {
-      const response = await refreshClient.post<{ accessToken: string }>('/auth/refresh');
-      tokenProvider.saveTokens(response);
-    },
+    recover: () => session.renew(), // session: a tokenSession() built on refreshClient — see below
   }),
 );
-client.use(auth(bearer(tokenProvider)));
+client.use(auth(bearer(session)));
 ```
 
 Every field on `extend()`'s options falls back to the parent's via `??`, so passing a
@@ -364,11 +360,11 @@ override, which layers on top).
 
 ## Authentication and recovery
 
-Two independent, narrow contracts replace what a single monolithic `TokenProvider`
-interface would otherwise have to do: **`auth`** attaches credentials to every request;
-**`recover`** detects an eligible failure, runs a recovery step, and retries. Neither
-knows anything about the other, and neither is privileged over a plugin you write
-yourself.
+Two independent, narrow contracts do the work: **`auth`** attaches credentials to every
+request; **`recover`** detects an eligible failure, runs a recovery step, and retries.
+Neither knows anything about the other, and neither is privileged over a plugin you
+write yourself. `tokenSession()` (below) is the one place that ties the two together
+around a stored token.
 
 ### `auth` and `Authenticator`
 
@@ -393,8 +389,8 @@ _how_ (a Bearer token, an API key, a request signature, several combined) lives 
 import { allOf, apiKey, basic, bearer } from '@lamstack/http-client';
 
 // The common case — a Bearer token from any source with getAccessToken():
-client.use(auth(bearer(tokenProvider)));
-client.use(auth(bearer(tokenProvider, { header: 'x-api-key', scheme: '' }))); // custom header, no "Bearer " prefix
+client.use(auth(bearer(session))); // session: a tokenSession() — see below
+client.use(auth(bearer(session, { header: 'x-api-key', scheme: '' }))); // custom header, no "Bearer " prefix
 client.use(auth(bearer(() => currentToken))); // or a plain function
 
 // A static or dynamically-resolved API key, as a header or a query parameter:
@@ -407,7 +403,7 @@ client.use(auth(basic(username, password)));
 // Compose several — e.g. a bearer token plus a request signature:
 client.use(
   auth(
-    allOf(bearer(tokenProvider), async (request) => ({
+    allOf(bearer(session), async (request) => ({
       ...request,
       headers: { ...request.headers, 'x-signature': await sign(request) },
     })),
@@ -416,9 +412,9 @@ client.use(
 ```
 
 `bearer()` never emits a literal `"Bearer null"` — if its source resolves `null`/no
-token, the header is simply left unset. Any `TokenProvider` (below) satisfies `bearer()`'s
-source contract directly via its `getAccessToken()` method, so an existing provider slots
-straight into `auth(bearer(provider))`.
+token, the header is simply left unset. `bearer()`'s source contract is just
+`{ getAccessToken(): Awaitable<string | null> }` (or a plain function) — a `tokenSession()`
+(below) satisfies it directly, and so does anything else with a `getAccessToken()` method.
 
 ### `recover`
 
@@ -427,12 +423,9 @@ import { onStatus, recover } from '@lamstack/http-client';
 
 client.use(
   recover({
-    recover: async () => {
-      const response = await refreshClient.post<{ accessToken: string }>('/auth/refresh');
-      await tokenProvider.saveTokens(response);
-    },
+    recover: () => session.renew(), // session: a tokenSession() — see below
     shouldRecover: onStatus(401, { exclude: ['/auth/login', '/auth/refresh'] }), // default: onStatus(401)
-    canRecover: () => tokenProvider.canRefresh(), // optional — skips a doomed cycle before it starts
+    canRecover: () => session.canRenew(), // optional — skips a doomed cycle before it starts
     maxAttempts: 1, // default — one recovery cycle per logical request
     events: recoveryEvents, // optional EventBus<RecoveryEventMap> — see below
   }),
@@ -456,7 +449,7 @@ On an eligible failure (401 by default, via `shouldRecover`):
    request's error with the recovery failure attached via `.cause`.
 
 `recover()` calls no cleanup itself on failure — wire that yourself via events (below),
-e.g. `events.on('recovery:failed', () => tokenProvider.clear())`.
+e.g. `events.on('recovery:failed', () => session.end())`.
 
 **Concurrency:** if several requests fail at once while a cycle is already in flight,
 they share that one cycle (no duplicate recovery calls) — but each still resolves or
@@ -467,121 +460,110 @@ already completed and rotated the credential retries directly with it instead of
 starting a redundant cycle — tracked via an internal generation counter, no configuration
 needed.
 
-### The `TokenProvider` contract and built-in strategies
+### `tokenSession()` — wiring `auth` + `recover` to a token store
 
-`TokenProvider` predates the `auth`/`recover` split and is unchanged — it's still the
-shape both shipped strategies implement, and its `getAccessToken()` alone is all
-`bearer()` needs:
-
-```ts
-interface TokenProvider {
-  getAccessToken(): Awaitable<string | null>;
-  saveTokens(payload: unknown): Awaitable<void>;
-  clear(): Awaitable<void>;
-  canRefresh(): Awaitable<boolean>;
-  buildRefreshRequest(): Awaitable<HttpRequestInit>;
-  decorate?(request: HttpRequest): HttpRequest; // legacy escape hatch — auth() no longer calls this, see below
-}
-```
-
-(`Awaitable<T>` is `T | Promise<T>` — every method may be sync or async.)
-
-**`LocalStorageTokenProvider`** — for backends that return `accessToken`/`refreshToken`
-in the JSON response body:
+`tokenSession()` is the one built-in way to tie a stored token to both `auth()` and
+`recover()` — wrap a plain storage object and a renewal callback, get back a
+`TokenSession` that satisfies `bearer()`'s source contract and plugs directly into
+`recover()`'s options:
 
 ```ts
-import { LocalStorageTokenProvider } from '@lamstack/http-client';
-
-const tokenProvider = new LocalStorageTokenProvider({
-  store: window.localStorage, // anything with getItem/setItem/removeItem — see Storage below
-  refreshUrl: '/auth/refresh',
-  accessTokenKey: 'access_token', // default
-  refreshTokenKey: 'refresh_token', // default
-  // parser?: defaults to reading { accessToken }, { data: { accessToken } }, or { access_token }
-});
-
-client.use(
-  recover({
-    recover: async () => {
-      const refreshInit = await tokenProvider.buildRefreshRequest();
-      const response = await refreshClient.request(refreshInit);
-      await tokenProvider.saveTokens(response.data);
-    },
-    canRecover: () => tokenProvider.canRefresh(),
-  }),
-);
-client.use(auth(bearer(tokenProvider)));
-```
-
-**`CookieHttpOnlyTokenProvider`** — for backends that issue the refresh token as an
-HttpOnly cookie the browser sends automatically. The access token lives in memory only
-(never persisted); `canRefresh()` can't verify the cookie exists (JS can't read an
-HttpOnly cookie) so it trusts a `SIGNED_IN` flag in `store` instead, letting the backend
-reject the refresh call if the cookie is actually gone. `auth()` no longer calls
-`provider.decorate()` automatically — declare `credentials: 'include'` on the client
-itself instead, so cookies are sent on every request:
-
-```ts
-import { CookieHttpOnlyTokenProvider } from '@lamstack/http-client';
-
-const tokenProvider = new CookieHttpOnlyTokenProvider({
-  store: window.localStorage, // only stores the sign-in flag, never a token
-  refreshUrl: '/auth/refresh',
-});
-
-const client = new HttpClient({ adapter: fetchAdapter(), credentials: 'include' });
-```
-
-Both accept any `Storage`-shaped object:
-
-```ts
-interface Storage {
+interface TokenStore {
   getItem(key: string): Awaitable<string | null>;
   setItem(key: string, value: string): Awaitable<void>;
   removeItem(key: string): Awaitable<void>;
 }
+
+interface TokenSession {
+  getAccessToken(): Awaitable<string | null>;
+  renew(): Promise<void>;
+  canRenew(): Awaitable<boolean>;
+  save(payload: unknown): Promise<void>; // for feature code to call directly after sign-in
+  end(): Awaitable<void>;
+}
 ```
 
-— `localStorage`, React Native's `AsyncStorage`, or a plain `Map` wrapper all qualify.
+(`Awaitable<T>` is `T | Promise<T>` — every callback may be sync or async. `TokenStore`
+is deliberately minimal — `localStorage`, React Native's `AsyncStorage`, or a plain `Map`
+wrapper all qualify.)
 
-Nothing above is special-cased — a third strategy (e.g. a multi-tenant token store, or
-one backed by a secure OS keychain) implements the same shape and works with
-`auth(bearer(...))`/`recover(...)` exactly the same way.
-
-### `tokenSession()` — a lower-level session primitive
-
-`tokenSession()` wraps a plain storage object and a renewal callback into the
-`TokenSession` contract `bearer()`/`recover()` are built on — a second, lower-level way
-to wire the same pattern `TokenProvider` above provides, not a replacement for it:
+**Backends that return `accessToken`/`refreshToken` in the JSON response body** — the
+refresh token is persisted in `store` and sent back as `{ refreshToken }`:
 
 ```ts
 import { tokenSession } from '@lamstack/http-client';
 
-// TokenStore is the same getItem/setItem/removeItem shape as Storage above —
-// window.localStorage, AsyncStorage, or a Map wrapper all qualify.
+function parseAccessToken(payload: unknown): string | null {
+  return (payload as { accessToken?: string } | null)?.accessToken ?? null;
+}
+
 const session = tokenSession({
   store: window.localStorage,
-  client: refreshClient, // the session owns this client — see extend() above
+  client: refreshClient, // no auth/recover plugins attached — see extend() above
+  canRenew: async (store) => Boolean(await store.getItem('refresh_token')),
   renew: async (client, store) => {
     const refreshToken = await store.getItem('refresh_token');
-    const response = await client.post<{ accessToken: string }>('/auth/refresh', { refreshToken });
-    await store.setItem('access_token', response.accessToken);
+    const response = await client.request({
+      url: '/auth/refresh',
+      method: 'POST',
+      body: { refreshToken },
+    });
+    const accessToken = parseAccessToken(response.data);
+    if (accessToken) await store.setItem('access_token', accessToken);
+    return accessToken;
   },
-  accessTokenKey: 'access_token', // default
-  canRenew: async (store) => Boolean(await store.getItem('refresh_token')), // optional — omit for "always attempt renewal"
 });
+
+// After a successful sign-in response elsewhere in the app:
+await session.save(signInResponse); // uses the same parseAccessToken logic — see save's default below
 
 client.use(recover({ recover: () => session.renew(), canRecover: () => session.canRenew() }));
 client.use(auth(bearer(session)));
-
-recoveryEvents.on('recovery:failed', () => session.end());
 ```
 
-`session.getAccessToken()` satisfies `bearer()`'s source contract directly. `renew` is
-fully generic — an HTTP call is the common case, but `firebaseUser.getIdToken(true)`, an
-OS keychain refresh, or a `BroadcastChannel` resync all fit the same shape. `end()` isn't
-called automatically on a failed cycle (same reasoning as `TokenProvider.clear()` above)
-— wire it through `recoveryEvents` yourself.
+`save()` runs whatever callback you pass as `TokenSessionOptions.save` (same shape as
+`renew`, called with `(payload, store)` instead of `(client, store)`) — a no-op if you
+never configure one, since not every strategy needs an explicit "save from sign-in" step.
+
+**Backends that issue the refresh token as an HttpOnly cookie** the browser sends
+automatically — the access token is kept in memory only (never persisted, to limit XSS
+exposure), and `renew`/`save` return the token directly instead of writing it to `store`:
+
+```ts
+const session = tokenSession({
+  store: window.localStorage, // only stores a "signed in" flag, never a token
+  client: refreshClient,
+  canRenew: async (store) => Boolean(await store.getItem('SIGNED_IN')),
+  renew: async (client, store) => {
+    const response = await client.request({
+      url: '/auth/refresh',
+      method: 'GET',
+      credentials: 'include',
+    });
+    await store.setItem('SIGNED_IN', 'true');
+    return parseAccessToken(response.data); // returned directly — never written to store
+  },
+  onEnd: (store) => store.removeItem('SIGNED_IN'),
+});
+
+// auth() doesn't set credentials: 'include' automatically — declare it on the client itself:
+const client = new HttpClient({ adapter: fetchAdapter(), credentials: 'include' });
+client.use(recover({ recover: () => session.renew(), canRecover: () => session.canRenew() }));
+client.use(auth(bearer(session)));
+```
+
+`renew`/`save` may either write the new access token into `store` and return nothing
+(the session re-reads it from `store` afterward — the first example above), or return
+the token (or `null`) directly, which the session caches without ever touching `store`
+for it (the second example) — required for a strategy that must not persist the access
+token at all. `onEnd` runs in addition to clearing the access token in `end()`, for a
+second piece of state to clean up (a "signed in" flag, a separate refresh token key, ...);
+`end()` isn't called automatically on a failed recovery cycle — wire it through
+`recoveryEvents` yourself, e.g. `events.on('recovery:failed', () => session.end())`.
+
+Nothing above is special-cased — any strategy (a multi-tenant token store, one backed by
+a secure OS keychain, Firebase's `getIdToken`) implements the same `renew`/`canRenew`
+shape and works with `auth(bearer(...))`/`recover(...)` exactly the same way.
 
 ### Recovery events (`EventBus`)
 
@@ -595,7 +577,7 @@ import type { RecoveryEventMap } from '@lamstack/http-client';
 const recoveryEvents = new EventBus<RecoveryEventMap>();
 
 const unsubscribe = recoveryEvents.on('recovery:failed', ({ error }) => {
-  tokenProvider.clear();
+  session.end();
   redirectToLogin();
 });
 // later: unsubscribe();
@@ -811,7 +793,7 @@ request settles).
 ## TypeScript
 
 Every public type is exported from the package root (`HttpRequest`, `HttpResponse`,
-`HttpPlugin`, `Authenticator`, `TokenProvider`, `RecoveryContext`, ...). Generic type
+`HttpPlugin`, `Authenticator`, `TokenSession`, `RecoveryContext`, ...). Generic type
 parameters flow through the whole chain: `client.get<User>('/me')` types the resolved
 value; `client.request<User>(init)` types `response.data`;
 `client.post<CreatedUser, CreateUserInput>('/users', input)` types both the body and the
@@ -828,18 +810,14 @@ Not yet implemented:
   honestly; this is where that flips to `true`.
 - **An SSE plugin** — the plugin system is already extensible enough for one (see
   [Writing your own plugin](#writing-your-own-plugin)); it just doesn't ship yet.
-- **A "renew preset"** wrapping the common `buildRefreshRequest`/`saveTokens`/parser
-  pattern into a one-line [`tokenSession()`](#tokensession--a-lower-level-session-primitive)
-  config — `tokenSession()`/`TokenStore` itself ships today; only this convenience wrapper
-  around the common case doesn't yet.
 
 ## Credits
 
 This package generalizes a production `HttpClient` implementation (axios-only) from an
 internal dashboard into an adapter-agnostic, publicly reusable one, keeping full behavior
-parity with the original (`HttpClient`'s verb methods, request/response interceptors,
-`TokenProvider`, `FormBuilder`/`FileSerializer`, `createCancelable`) while making three
-deliberate improvements along the way:
+parity with the original (`HttpClient`'s verb methods, request/response interceptors, its
+token storage/refresh strategy, `FormBuilder`/`FileSerializer`, `createCancelable`) while
+making three deliberate improvements along the way:
 
 - **Per-request error identity on a failed shared recovery cycle** — every request
   queued behind an in-flight `recover()` cycle rejects with its own original error (the

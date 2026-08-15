@@ -1,6 +1,6 @@
 {
   "name": "@lamstack/http-client",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Framework-agnostic HTTP client core with a pluggable middleware pipeline — no hard dependency on axios or fetch.",
   "keywords": [
     "http",

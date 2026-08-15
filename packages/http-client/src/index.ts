@@ -1,6 +1,8 @@
 export { resolve } from './core/resolve';
 export type { ResolveDefaults } from './core/resolve';
 
+export { withHeaders, withMeta } from './core/request';
+
 export { PluginOrder } from './core/types';
 export type {
   Awaitable,

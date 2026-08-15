@@ -1,4 +1,5 @@
 import { HttpError } from '../core/http-error';
+import { withMeta } from '../core/request';
 import { PluginOrder } from '../core/types';
 import type { Awaitable, HttpPlugin, HttpRequest } from '../core/types';
 import type { EventBus } from '../core/event-bus';
@@ -124,10 +125,7 @@ export function recover(options: RecoverOptions): HttpPlugin {
     name: 'recover',
     order: options.order ?? PluginOrder.recover,
     handler: async (request, next) => {
-      let current: HttpRequest = {
-        ...request,
-        meta: { ...request.meta, [GENERATION]: generation },
-      };
+      let current: HttpRequest = withMeta(request, { [GENERATION]: generation });
 
       while (true) {
         try {
@@ -158,10 +156,7 @@ export function recover(options: RecoverOptions): HttpPlugin {
           // else: a different request's cycle already rotated the credential since this
           // one was dispatched — skip straight to retrying with it, no redundant cycle.
 
-          current = {
-            ...current,
-            meta: { ...current.meta, [ATTEMPT]: attempt + 1, [GENERATION]: generation },
-          };
+          current = withMeta(current, { [ATTEMPT]: attempt + 1, [GENERATION]: generation });
         }
       }
     },

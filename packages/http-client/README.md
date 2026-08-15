@@ -717,6 +717,7 @@ that attaches a client-id header (the kind of extensibility a future SSE plugin 
 build on, without needing any change to core):
 
 ```ts
+import { withHeaders } from '@lamstack/http-client';
 import type { HttpPlugin } from '@lamstack/http-client';
 
 function clientIdPlugin(clientId: string): HttpPlugin {
@@ -724,13 +725,20 @@ function clientIdPlugin(clientId: string): HttpPlugin {
     name: 'client-id',
     order: 50, // between recover and auth — see PluginOrder
     handler: async (request, next) => {
-      return next({ ...request, headers: { ...request.headers, 'x-client-id': clientId } });
+      return next(withHeaders(request, { 'x-client-id': clientId }));
     },
   };
 }
 
 client.use(clientIdPlugin('abc123'));
 ```
+
+Never build the header object by hand (`{ ...request.headers, 'X-Client-Id': ... }`) —
+`withHeaders` normalizes the key the same way `resolve()` does, so a header that differs
+only in case from one already on the request overwrites it instead of adding a duplicate.
+`withMeta(request, meta)` does the equivalent for `meta`, preserving both `string` and
+`Symbol.for(...)` keys already on the request. Both are pure — they return a new request,
+never mutate the one you pass in.
 
 A retry-style plugin that inspects the response _after_ `next()` resolves/rejects:
 

@@ -1,6 +1,6 @@
+import { mergeHeaders } from './headers';
 import type {
   HeadersInput,
-  HttpHeaders,
   HttpMeta,
   HttpRequest,
   HttpRequestInit,
@@ -24,22 +24,6 @@ function resolveUrl(url: string, baseURL: string | undefined): string {
   const base = baseURL.endsWith('/') ? baseURL : `${baseURL}/`;
   const path = url.startsWith('/') ? url.slice(1) : url;
   return new URL(path, base).toString();
-}
-
-function mergeHeaders(...layers: (HeadersInput | undefined)[]): HttpHeaders {
-  const merged: Record<string, string> = {};
-  for (const layer of layers) {
-    if (!layer) continue;
-    for (const [key, value] of Object.entries(layer)) {
-      const lowerKey = key.toLowerCase();
-      if (value === null || value === undefined) {
-        delete merged[lowerKey];
-      } else {
-        merged[lowerKey] = String(value);
-      }
-    }
-  }
-  return merged;
 }
 
 function defaultParamsSerializer(params: QueryParams): string {

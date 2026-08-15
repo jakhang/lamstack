@@ -30,6 +30,13 @@ describe('bearer', () => {
     expect(request.headers['x-api-key']).toBe('tok123');
     expect(request.headers.authorization).toBeUndefined();
   });
+
+  it('overwrites an existing differently-cased header instead of adding a duplicate — a mixed-case header option is still lowercased via withHeaders', async () => {
+    const authenticator = bearer({ getAccessToken: async () => 'tok123' }, { header: 'X-Api-Key' });
+    const request = await authenticator(resolve({ url: '/x', headers: { 'x-api-key': 'stale' } }));
+    expect(request.headers['x-api-key']).toBe('Bearer tok123');
+    expect(Object.keys(request.headers)).toHaveLength(1);
+  });
 });
 
 describe('apiKey', () => {

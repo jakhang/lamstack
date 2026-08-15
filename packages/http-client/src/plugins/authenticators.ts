@@ -1,3 +1,4 @@
+import { withHeaders } from '../core/request';
 import type { Awaitable } from '../core/types';
 import type { Authenticator } from './auth.plugin';
 
@@ -13,17 +14,14 @@ export type BearerSource =
 
 /** Attaches the current access token as a header — the common case. Accepts anything with a `getAccessToken()`, or a plain function. */
 export function bearer(source: BearerSource, options: BearerOptions = {}): Authenticator {
-  const header = (options.header ?? 'authorization').toLowerCase();
+  const header = options.header ?? 'authorization';
   const scheme = options.scheme ?? 'Bearer';
   const getAccessToken = typeof source === 'function' ? source : () => source.getAccessToken();
 
   return async (request) => {
     const token = await getAccessToken();
     if (!token) return request;
-    return {
-      ...request,
-      headers: { ...request.headers, [header]: scheme ? `${scheme} ${token}` : token },
-    };
+    return withHeaders(request, { [header]: scheme ? `${scheme} ${token}` : token });
   };
 }
 
@@ -41,7 +39,7 @@ export function apiKey(options: ApiKeyOptions): Authenticator {
     const value = typeof options.value === 'function' ? await options.value() : options.value;
 
     if (options.in === 'header') {
-      return { ...request, headers: { ...request.headers, [options.name.toLowerCase()]: value } };
+      return withHeaders(request, { [options.name]: value });
     }
 
     const pair = `${encodeURIComponent(options.name)}=${encodeURIComponent(value)}`;
@@ -55,10 +53,7 @@ export function apiKey(options: ApiKeyOptions): Authenticator {
 /** Attaches a static `Authorization: Basic <base64>` header from a username/password pair. */
 export function basic(username: string, password: string): Authenticator {
   const token = btoa(`${username}:${password}`);
-  return async (request) => ({
-    ...request,
-    headers: { ...request.headers, authorization: `Basic ${token}` },
-  });
+  return async (request) => withHeaders(request, { authorization: `Basic ${token}` });
 }
 
 /** Composes several authenticators, applying each in order to the previous one's output. */

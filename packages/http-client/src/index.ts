@@ -41,17 +41,14 @@ export type { RecoverOptions, RecoveryContext, RecoveryEventMap } from './plugin
 
 export { errorMapper } from './plugins/error-mapper.plugin';
 
-export { defaultAccessTokenParser } from './plugins/token-provider';
-export type { TokenProvider, Storage, AccessTokenParser } from './plugins/token-provider';
-
-export { LocalStorageTokenProvider } from './plugins/local-storage-token.provider';
-export type { LocalStorageTokenProviderOptions } from './plugins/local-storage-token.provider';
-
-export { CookieHttpOnlyTokenProvider } from './plugins/cookie-token.provider';
-export type { CookieHttpOnlyTokenProviderOptions } from './plugins/cookie-token.provider';
-
-export { tokenSession } from './plugins/token-session';
-export type { TokenSession, TokenSessionOptions, TokenStore } from './plugins/token-session';
+export { tokenSession, defaultAccessTokenParser } from './plugins/token-session';
+export type {
+  TokenSession,
+  TokenSessionOptions,
+  TokenStore,
+  TokenResult,
+  AccessTokenParser,
+} from './plugins/token-session';
 
 export type { FileSerializer } from './serializers/file-serializer';
 export { WebFileSerializer } from './serializers/web-file.serializer';

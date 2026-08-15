@@ -117,6 +117,14 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
           validateStatus: () => true,
         });
       } catch (cause) {
+        // Checked before the internal timeout, matching fetchAdapter: if a user abort and
+        // a timeout race (both signals end up `aborted: true` by the time this runs), the
+        // user's own cancellation is the more meaningful signal to report — a caller who
+        // aborted knows why they did; inferring "it must have been the timeout" instead
+        // would be misleading about a request they specifically chose to stop.
+        if (request.signal?.aborted) {
+          throw new HttpError('Request canceled', { code: 'CANCELED', status: 0, request, cause });
+        }
         if (timeoutController.signal.aborted) {
           throw new HttpError('Request timed out', { code: 'TIMEOUT', status: 0, request, cause });
         }

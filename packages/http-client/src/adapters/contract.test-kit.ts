@@ -232,5 +232,13 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
       );
       expect(new Uint8Array(response.data as ArrayBuffer)).toEqual(new Uint8Array([1, 2, 3]));
     });
+
+    // `credentials: 'omit'` is deliberately NOT a shared contract case here — axios/XHR's
+    // `withCredentials` is a single boolean and cannot express it distinctly from
+    // 'same-origin' (see axiosAdapter's own "credentials" describe block, and the
+    // README's Adapters section), so the two adapters cannot pass an identical assertion
+    // for it. fetchAdapter's ability to honour all three `credentials` values, and
+    // axiosAdapter's 'omit'/'same-origin' collapse, are each covered by adapter-specific
+    // tests instead (fetch.adapter.test.ts / axios.adapter.test.ts).
   });
 }

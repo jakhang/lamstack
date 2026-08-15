@@ -111,6 +111,9 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
             signal,
           });
         } catch (cause) {
+          // Checked before the internal timeout (same precedence axiosAdapter uses): if a
+          // user abort and a timeout race, the user's own cancellation is the more
+          // meaningful signal to report — see axios.adapter.ts's matching comment.
           if (request.signal?.aborted) {
             throw new HttpError('Request canceled', {
               code: 'CANCELED',

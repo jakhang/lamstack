@@ -260,7 +260,8 @@ interface HttpAdapter {
 Both shipped adapters currently report every capability `false` (progress support is
 v1.1 — see [Roadmap](#roadmap)) and behave identically for the same request: same
 `HttpResponse` shape on success, same `HttpError` code/status on failure — verified by a
-single shared contract test suite run against both.
+single shared contract test suite run against both. One known, documented divergence:
+`credentials: 'omit'` (see `axiosAdapter()` below).
 
 ### `fetchAdapter()`
 
@@ -299,6 +300,16 @@ auto-parsing/`validateStatus` (both vary across environments) so behavior stays
 identical to the fetch adapter regardless of your axios configuration. Timeout handling
 also combines your `signal` with an internal one via `AbortSignal.any(...)`, same as
 `fetchAdapter()` — see the **Node 20.3+ or Safari 17.4+** note above.
+
+**Known divergence — `credentials: 'omit'` is not expressible through axios.** Axios/XHR's
+`withCredentials` is a single boolean: whether to send/accept cross-site cookies. There is
+no axios request option distinguishing "never send cookies, even same-origin" (`'omit'`)
+from "send same-origin cookies, never cross-site" (`'same-origin'`, the default) — both
+map to `withCredentials: false` through `axiosAdapter()`. `fetchAdapter()` honours all
+three `credentials` values, since native `fetch`'s `credentials` option was designed with
+that distinction. If your app depends on `'omit'` specifically (e.g. a shared-hosting
+subdomain where you must not send the parent domain's session cookie), use
+`fetchAdapter()`.
 
 ### Writing your own adapter
 

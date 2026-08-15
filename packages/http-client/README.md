@@ -439,6 +439,7 @@ client.use(
     skip: metaOptOut('recover'), // default — see meta flags above
     canRecover: () => session.canRenew(), // optional — skips a doomed cycle before it starts
     maxAttempts: 1, // default — one recovery cycle per logical request
+    cooldownMs: 1000, // default — see "Refresh storms" below; 0 disables it
     events: recoveryEvents, // optional EventBus<RecoveryEventMap> — see below
   }),
 );
@@ -465,6 +466,15 @@ On an eligible failure (401 by default, via `shouldRecover`, once `skip` has let
 
 `recover()` calls no cleanup itself on failure — wire that yourself via events (below),
 e.g. `events.on('recovery:failed', () => session.end())`.
+
+**Refresh storms:** without a cooldown, every request that fails while the refresh
+endpoint itself is down would trigger its own brand-new cycle against that same down
+endpoint, with no ceiling. `cooldownMs` (default `1000`; `0` disables it) closes that gap:
+once a cycle fails, any request that would otherwise start a fresh one within `cooldownMs`
+instead throws its own original error immediately — `.cause` set to the most recent
+recovery failure — and emits `recovery:unavailable`, with no attempt against the refresh
+endpoint at all. A successful cycle resets the cooldown immediately, so it never blocks a
+request that comes in right after a working recovery.
 
 **Concurrency:** if several requests fail at once while a cycle is already in flight,
 they share that one cycle (no duplicate recovery calls) — but each still resolves or

@@ -552,3 +552,130 @@ describe('recover — stale generation after an unrelated rotation', () => {
     expect(aAttempts).toBe(2);
   });
 });
+
+describe('recover — cooldown after a failed cycle', () => {
+  it('calls recover() at most once across repeated 401s within the cooldown window, throwing the cached recovery failure via .cause instead of starting a new cycle', async () => {
+    vi.useFakeTimers();
+    try {
+      const main = scriptedAdapter(['unauthorized']);
+      const refreshMock = scriptedAdapter(['unauthorized']);
+      const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
+      const events = new EventBus<RecoveryEventMap>();
+      const onUnavailable = vi.fn();
+      events.on('recovery:unavailable', onUnavailable);
+
+      const client = new HttpClient({ adapter: main.adapter });
+      client.use(
+        recover({
+          recover: async () => {
+            await refreshClient.request({ url: '/refresh', method: 'POST' });
+          },
+          events,
+        }),
+      );
+
+      const first: unknown = await client.get('/x').catch((e: unknown) => e);
+      expect(HttpError.is(first)).toBe(true);
+      expect(refreshMock.calls).toHaveLength(1);
+
+      vi.advanceTimersByTime(500); // well within the default 1000ms cooldown
+
+      const second: unknown = await client.get('/x').catch((e: unknown) => e);
+      expect(HttpError.is(second)).toBe(true);
+      expect((second as HttpError).cause).toBeInstanceOf(HttpError);
+      expect(((second as HttpError).cause as HttpError).status).toBe(401);
+      expect(refreshMock.calls).toHaveLength(1); // no second cycle attempted
+      expect(onUnavailable).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts a fresh cycle once the cooldown window has fully elapsed', async () => {
+    vi.useFakeTimers();
+    try {
+      const main = scriptedAdapter(['unauthorized']);
+      const refreshMock = scriptedAdapter(['unauthorized']);
+      const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
+
+      const client = new HttpClient({ adapter: main.adapter });
+      client.use(
+        recover({
+          recover: async () => {
+            await refreshClient.request({ url: '/refresh', method: 'POST' });
+          },
+        }),
+      );
+
+      await client.get('/x').catch((e: unknown) => e);
+      expect(refreshMock.calls).toHaveLength(1);
+
+      vi.advanceTimersByTime(1000); // exactly the default cooldownMs
+
+      await client.get('/x').catch((e: unknown) => e);
+      expect(refreshMock.calls).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resets the cooldown as soon as a cycle succeeds, so the very next failure can start its own fresh cycle immediately', async () => {
+    vi.useFakeTimers();
+    try {
+      const main = scriptedAdapter(['unauthorized']);
+      const refreshMock = scriptedAdapter(['unauthorized', { accessToken: 'new-token' }, 'unauthorized']);
+      const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
+
+      const client = new HttpClient({ adapter: main.adapter });
+      client.use(
+        recover({
+          recover: async () => {
+            await refreshClient.request({ url: '/refresh', method: 'POST' });
+          },
+        }),
+      );
+
+      await client.get('/x').catch((e: unknown) => e); // cycle 1: fails, cooldown starts
+      expect(refreshMock.calls).toHaveLength(1);
+
+      vi.advanceTimersByTime(1000); // let the cooldown from cycle 1 fully elapse
+
+      await client.get('/x').catch((e: unknown) => e); // cycle 2: succeeds, resets cooldown
+      expect(refreshMock.calls).toHaveLength(2);
+
+      // No time advance at all — a lingering cooldown from cycle 1 would still be active here.
+      await client.get('/x').catch((e: unknown) => e); // cycle 3: starts immediately, fails
+      expect(refreshMock.calls).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cooldownMs: 0 disables the cooldown — repeated failures each attempt their own fresh cycle immediately', async () => {
+    vi.useFakeTimers();
+    try {
+      const main = scriptedAdapter(['unauthorized']);
+      const refreshMock = scriptedAdapter(['unauthorized']);
+      const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
+
+      const client = new HttpClient({ adapter: main.adapter });
+      client.use(
+        recover({
+          recover: async () => {
+            await refreshClient.request({ url: '/refresh', method: 'POST' });
+          },
+          cooldownMs: 0,
+        }),
+      );
+
+      await client.get('/x').catch((e: unknown) => e);
+      expect(refreshMock.calls).toHaveLength(1);
+
+      // No time advance at all — cooldownMs: 0 means nothing should ever block a fresh cycle.
+      await client.get('/x').catch((e: unknown) => e);
+      expect(refreshMock.calls).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

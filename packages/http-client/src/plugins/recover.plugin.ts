@@ -41,6 +41,15 @@ export interface RecoverOptions {
   canRecover?: () => Awaitable<boolean>;
   /** Maximum recovery cycles per logical request. Defaults to 1. */
   maxAttempts?: number;
+  /**
+   * Cooldown after a failed cycle, in ms, before another request may start a fresh one.
+   * Defaults to `1000`; `0` disables it. Prevents a "refresh storm" — every request that
+   * would otherwise start a new cycle while the cooldown is active instead throws its own
+   * original error immediately, with the most recent recovery failure attached via
+   * `.cause`, and emits `recovery:unavailable`. A successful cycle resets the cooldown
+   * immediately, so it never blocks a request following a working recovery.
+   */
+  cooldownMs?: number;
   events?: EventBus<RecoveryEventMap>;
   order?: number;
 }
@@ -105,12 +114,14 @@ function withCause(error: HttpError, cause: unknown): HttpError {
  * `next()` instead of starting a redundant cycle.
  */
 export function recover(options: RecoverOptions): HttpPlugin {
-  const { recover: runRecovery, canRecover, maxAttempts = 1, events } = options;
+  const { recover: runRecovery, canRecover, maxAttempts = 1, events, cooldownMs = 1000 } = options;
   const shouldRecover = options.shouldRecover ?? onStatus(401);
   const skip = options.skip ?? metaOptOut('recover');
 
   let inFlight: Promise<void> | null = null;
   let generation = 0;
+  let cooldownUntil = 0;
+  let lastRecoveryError: unknown;
 
   function runOnce(context: RecoveryContext): Promise<void> {
     if (!inFlight) {
@@ -118,8 +129,11 @@ export function recover(options: RecoverOptions): HttpPlugin {
         try {
           await runRecovery(context);
           generation += 1;
+          cooldownUntil = 0;
           events?.emit('recovery:succeeded', {});
         } catch (error) {
+          cooldownUntil = cooldownMs > 0 ? Date.now() + cooldownMs : 0;
+          lastRecoveryError = error;
           events?.emit('recovery:failed', { error });
           throw error;
         } finally {
@@ -152,6 +166,11 @@ export function recover(options: RecoverOptions): HttpPlugin {
           const stale = getGeneration(current) < generation;
 
           if (!stale) {
+            if (!inFlight && cooldownUntil > 0 && Date.now() < cooldownUntil) {
+              events?.emit('recovery:unavailable', { error });
+              throw withCause(error, lastRecoveryError);
+            }
+
             if (canRecover && !(await canRecover())) {
               events?.emit('recovery:unavailable', { error });
               throw error;

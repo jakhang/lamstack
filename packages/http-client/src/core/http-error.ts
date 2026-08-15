@@ -13,6 +13,13 @@ export interface HttpErrorOptions<T> {
   cause?: unknown;
 }
 
+// A global-registry symbol, not a plain `instanceof` check: tsup only code-splits the ESM
+// output, so the CJS build inlines a separate HttpError class into each entry point
+// (index.cjs, adapters/fetch.cjs, adapters/axios.cjs) — `instanceof` across two of those
+// entry points is always false, even for the exact same error. `Symbol.for` resolves to the
+// same symbol across realms/duplicate installs too, which a per-module `Symbol()` would not.
+const BRAND = Symbol.for('lamstack.http.HttpError');
+
 /**
  * The only error type an `HttpAdapter` may throw — part of the adapter contract,
  * not something a plugin normalizes after the fact. `send()`
@@ -44,6 +51,9 @@ export class HttpError<T = unknown> extends Error {
       enumerable: false,
       configurable: true,
     });
+    // Non-enumerable for the same reason as `cause` — never leaks into JSON.stringify/
+    // spread/Object.keys.
+    Object.defineProperty(this, BRAND, { value: true, enumerable: false });
     Object.setPrototypeOf(this, HttpError.prototype);
   }
 
@@ -56,7 +66,11 @@ export class HttpError<T = unknown> extends Error {
   }
 
   static is(error: unknown): error is HttpError {
-    return error instanceof HttpError;
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      (error as Record<symbol, unknown>)[BRAND] === true
+    );
   }
 
   /**

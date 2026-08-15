@@ -18,7 +18,7 @@ export interface ErrorMapperOptions {
 /**
  * Maps a server error payload into a domain-specific error. Transport-level
  * normalization (network failure, timeout, non-2xx status) already happened
- * in the adapter (SPEC.md §2.2) — this only reshapes what a caller sees.
+ * in the adapter — this only reshapes what a caller sees.
  * Registered at `PluginOrder.normalize` by default, outside `recover`/`auth`, so
  * `recover` still inspects the raw `HttpError`; only errors that
  * survive a recovery retry ever reach the mapper.

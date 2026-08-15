@@ -53,7 +53,7 @@ function appendParams(
 /**
  * Resolves caller-facing `HttpRequestInit` (+ client-level defaults) into an
  * immutable `HttpRequest`. Runs exactly once, before the first middleware — see
- * SPEC.md §2.1 for the full rules table this implements.
+ * README's "Resolution rules" table for the full rules this implements.
  */
 export function resolve<TBody = unknown>(
   init: HttpRequestInit<TBody>,

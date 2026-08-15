@@ -14,8 +14,8 @@ export interface HttpErrorOptions<T> {
 }
 
 /**
- * The only error type an `HttpAdapter` may throw — part of the adapter contract
- * (SPEC.md §2.2), not something a plugin normalizes after the fact. `send()`
+ * The only error type an `HttpAdapter` may throw — part of the adapter contract,
+ * not something a plugin normalizes after the fact. `send()`
  * resolves only for a 2xx response; every other outcome rejects with one of these.
  */
 export class HttpError<T = unknown> extends Error {

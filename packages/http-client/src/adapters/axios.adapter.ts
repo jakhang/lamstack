@@ -77,7 +77,7 @@ function parseBody(responseType: ResponseType, raw: unknown, contentType?: strin
   }
 }
 
-/** Wraps a caller-supplied axios instance, treated as an opaque transport — see SPEC.md §4. */
+/** Wraps a caller-supplied axios instance, treated as an opaque transport (see README's "Adapters"). */
 export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
   return {
     name: 'axios',

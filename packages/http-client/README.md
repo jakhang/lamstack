@@ -295,7 +295,9 @@ Wraps a caller-supplied `AxiosInstance` as an **opaque transport** — it doesn'
 whether that instance itself uses XHR, Node's `http`, or axios's own newer
 `adapter: 'fetch'` option internally. The adapter disables axios's own JSON
 auto-parsing/`validateStatus` (both vary across environments) so behavior stays
-identical to the fetch adapter regardless of your axios configuration.
+identical to the fetch adapter regardless of your axios configuration. Timeout handling
+also combines your `signal` with an internal one via `AbortSignal.any(...)`, same as
+`fetchAdapter()` — see the **Node 20.3+ or Safari 17.4+** note above.
 
 ### Writing your own adapter
 
@@ -398,7 +400,7 @@ _how_ (a Bearer token, an API key, a request signature, several combined) lives 
 ### Built-in authenticators
 
 ```ts
-import { allOf, apiKey, basic, bearer } from '@lamstack/http-client';
+import { allOf, apiKey, basic, bearer, withHeaders } from '@lamstack/http-client';
 
 // The common case — a Bearer token from any source with getAccessToken():
 client.use(auth(bearer(session))); // session: your own getAccessToken object — see below
@@ -415,10 +417,9 @@ client.use(auth(basic(username, password)));
 // Compose several — e.g. a bearer token plus a request signature:
 client.use(
   auth(
-    allOf(bearer(session), async (request) => ({
-      ...request,
-      headers: { ...request.headers, 'x-signature': await sign(request) },
-    })),
+    allOf(bearer(session), async (request) =>
+      withHeaders(request, { 'x-signature': await sign(request) }),
+    ),
   ),
 );
 ```
@@ -609,8 +610,10 @@ client.use(recover({ recover: renewSession, events: recoveryEvents }));
 `EventBus` is **not a singleton** — create one per app (or per independent set of
 clients that should share recovery state) and pass it explicitly; nothing here reaches
 across unrelated `HttpClient` instances implicitly. `on()` returns an unsubscribe
-function, which composes naturally with a React `useEffect` cleanup. A throwing listener
-never prevents its siblings from running.
+function, which composes naturally with a React `useEffect` cleanup — the equivalent
+explicit call is `recoveryEvents.off('recovery:failed', listener)`, same signature as
+`on()`. `recoveryEvents.clearAll()` removes every listener for every event at once (e.g.
+in a test's `afterEach`). A throwing listener never prevents its siblings from running.
 
 | Event                  | Payload                | Fires                                                                                                                    |
 | ---------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -684,7 +687,9 @@ await client.upload('/files', {
 
 An existing `FormData` is sent through untouched instead of being rebuilt. `upload()`
 never sets an explicit `Content-Type` — the adapter's transport generates the multipart
-boundary itself.
+boundary itself. This conversion is `FormBuilder` (also exported from the package root)
+— `client.upload()` is a thin wrapper around `new FormBuilder(fileSerializer).build(data)`;
+construct one directly if you need a `FormData` without going through `HttpClient`.
 
 By default, non-primitive values are handled by `WebFileSerializer` (`File`/`Blob`). For
 React Native (no `File`/`Blob`; a `FormData` polyfill that expects
@@ -809,6 +814,23 @@ function scriptedAdapter(response: Partial<HttpResponse>): HttpAdapter {
 }
 
 const client = new HttpClient({ adapter: scriptedAdapter({ data: { id: '1' } }) });
+```
+
+Testing a `Middleware`/`HttpPlugin` directly — without a full `HttpClient` or adapter at
+all — needs a real `HttpRequest`, which `resolve()` (the same function `HttpClient`
+itself calls internally) builds from an `HttpRequestInit`:
+
+```ts
+import { resolve } from '@lamstack/http-client';
+
+const request = resolve({ url: '/x', headers: { 'x-foo': 'bar' } });
+const response = await myPlugin.handler(request, async (req) => ({
+  status: 200,
+  statusText: 'OK',
+  headers: {},
+  request: req,
+  data: { ok: true },
+}));
 ```
 
 This is the same pattern this package's own test suite uses throughout — see

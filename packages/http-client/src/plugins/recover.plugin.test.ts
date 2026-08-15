@@ -850,7 +850,11 @@ describe('recover — cooldown after a failed cycle', () => {
     vi.useFakeTimers();
     try {
       const main = scriptedAdapter(['unauthorized']);
-      const refreshMock = scriptedAdapter(['unauthorized', { accessToken: 'new-token' }, 'unauthorized']);
+      const refreshMock = scriptedAdapter([
+        'unauthorized',
+        { accessToken: 'new-token' },
+        'unauthorized',
+      ]);
       const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
 
       const client = new HttpClient({ adapter: main.adapter });

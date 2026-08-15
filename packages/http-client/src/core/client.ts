@@ -30,6 +30,12 @@ export class HttpClient {
   /** The composed pipeline, built lazily and cached across requests — invalidated in `use()`. */
   private pipeline: Next | null = null;
 
+  /**
+   * `plugins` is how `extend()` seeds a new client with the parent's plugin list — not
+   * part of the documented public API surface (a fresh client always starts with none;
+   * use `.use()`). Kept a plain constructor parameter rather than a private static
+   * factory only because `extend()` needs it from outside the class it's called on.
+   */
   constructor(options: HttpClientOptions, plugins: readonly (Middleware | HttpPlugin)[] = []) {
     const { adapter, fileSerializer, ...defaults } = options;
     this.adapter = adapter;

@@ -72,7 +72,7 @@ async function listen(server: ReturnType<typeof createServer>): Promise<number> 
 /**
  * One scripted scenario suite, run against any `HttpAdapter`, against a real
  * local HTTP server — this is what proves fetch/axios adapters are
- * interchangeable, not the architecture. See SPEC.md §4.
+ * interchangeable, not the architecture.
  */
 export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter): void {
   describe(`adapter contract — ${name}`, () => {

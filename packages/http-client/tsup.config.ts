@@ -1,8 +1,7 @@
 import { defineConfig } from 'tsup';
 
 // Three entries: the core (`.`) and each adapter as its own subpath, so
-// importing the package root never pulls in axios or fetch-specific code —
-// see SPEC.md §7.
+// importing the package root never pulls in axios or fetch-specific code.
 export default defineConfig({
   entry: {
     index: 'src/index.ts',

@@ -628,11 +628,11 @@ across unrelated `HttpClient` instances implicitly. `on()` returns an unsubscrib
 function, which composes naturally with a React `useEffect` cleanup. A throwing listener
 never prevents its siblings from running.
 
-| Event                  | Payload                | Fires                                                                         |
-| ---------------------- | ---------------------- | ----------------------------------------------------------------------------- |
-| `recovery:succeeded`   | `{}`                   | Once per successful recovery cycle, never once per queued request             |
-| `recovery:failed`      | `{ error: unknown }`   | Once per failed recovery cycle                                                |
-| `recovery:unavailable` | `{ error: HttpError }` | Once per request whose `canRecover()` check failed — recovery never attempted |
+| Event                  | Payload                | Fires                                                                                                                    |
+| ---------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `recovery:succeeded`   | `{}`                   | Once per successful recovery cycle, never once per queued request                                                        |
+| `recovery:failed`      | `{ error: unknown }`   | Once per failed recovery cycle                                                                                           |
+| `recovery:unavailable` | `{ error: HttpError }` | Once per request whose `canRecover()` check failed, or that hit an active `cooldownMs` window — recovery never attempted |
 
 ## Error handling
 

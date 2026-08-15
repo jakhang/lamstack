@@ -7,8 +7,28 @@ import { auth } from './auth.plugin';
 import { bearer } from './authenticators';
 import { onStatus, recover } from './recover.plugin';
 import type { RecoveryEventMap } from './recover.plugin';
-import { tokenSession } from './token-session';
+import { defaultAccessTokenParser, tokenSession } from './token-session';
 import type { TokenStore } from './token-session';
+
+describe('defaultAccessTokenParser', () => {
+  it('parses the { accessToken } shape', () => {
+    expect(defaultAccessTokenParser({ accessToken: 'a1' })).toBe('a1');
+  });
+
+  it('parses the { data: { accessToken } } shape', () => {
+    expect(defaultAccessTokenParser({ data: { accessToken: 'a1' } })).toBe('a1');
+  });
+
+  it('parses the { access_token } shape', () => {
+    expect(defaultAccessTokenParser({ access_token: 'a1' })).toBe('a1');
+  });
+
+  it('returns null when no known shape matches', () => {
+    expect(defaultAccessTokenParser({ nothing: true })).toBeNull();
+    expect(defaultAccessTokenParser(null)).toBeNull();
+    expect(defaultAccessTokenParser(undefined)).toBeNull();
+  });
+});
 
 function fakeStore(initial: Record<string, string> = {}): TokenStore {
   const map = new Map(Object.entries(initial));

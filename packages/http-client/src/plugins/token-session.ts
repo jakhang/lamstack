@@ -11,6 +11,23 @@ export interface TokenStore {
   removeItem(key: string): Awaitable<void>;
 }
 
+/** Extracts an access token string from a refresh/sign-in response payload, or `null` if not found. */
+export type AccessTokenParser = (payload: unknown) => string | null;
+
+/**
+ * Looks for an access token in common response shapes, in priority order:
+ * `{ accessToken }`, `{ data: { accessToken } }`, `{ access_token }`.
+ */
+export const defaultAccessTokenParser: AccessTokenParser = (payload) => {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  if (typeof record.accessToken === 'string') return record.accessToken;
+  const data = record.data as Record<string, unknown> | undefined;
+  if (data && typeof data.accessToken === 'string') return data.accessToken;
+  if (typeof record.access_token === 'string') return record.access_token;
+  return null;
+};
+
 /**
  * A renew/save callback may either write the new access token into `store` itself and
  * return nothing (in which case the session re-reads it from `store` afterward), or

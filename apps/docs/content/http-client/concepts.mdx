@@ -1,0 +1,238 @@
+# Concepts
+
+## The request lifecycle
+
+```text
+HttpRequestInit  →  resolve()  →  HttpRequest (immutable)  →  pipeline  →  HttpAdapter  →  HttpResponse
+     (yours)                         (what plugins see)      (your .use() chain)   (fetch/axios)
+```
+
+You never construct an `HttpRequest` yourself — you pass an `HttpRequestInit` to
+`client.get()`/`client.post()`/`client.request()`, and `resolve()` turns it into the
+immutable `HttpRequest` every middleware and the adapter actually see. Resolution runs
+**exactly once**, before the first middleware executes — middleware never mutates a
+resolved request, it produces a new one via `withHeaders()`/`withMeta()`.
+
+These rules run as part of resolution, the same regardless of which adapter you use:
+
+| Rule                  | Behavior                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `baseURL`             | Combined with a relative `url` via `new URL`-style joining                                                                           |
+| Absolute `url`        | Ignores `baseURL` entirely (detected via a leading `scheme://`)                                                                      |
+| Slash handling        | `baseURL: 'https://a.com/api'` + `url: 'users'` (or `'/users'`) → `https://a.com/api/users` — no doubled or missing slash either way |
+| Header precedence     | client-level `headers` ← request-level `headers`, later wins                                                                         |
+| Header deletion       | a `null`/`undefined` header value at the request layer removes a client-level default                                                |
+| Header case           | every header key is normalized to lowercase                                                                                          |
+| `params`              | `null`/`undefined` values omitted; arrays repeat the key (`id=1&id=2`); `Date` values become ISO strings                             |
+| Existing query string | `url: '/x?a=1'` + `params: { b: 2 }` → `/x?a=1&b=2` (merged, not replaced)                                                           |
+| `method`              | defaults to `'GET'`, uppercased                                                                                                      |
+| `timeout`             | defaults to `0` (unlimited)                                                                                                          |
+| `credentials`         | defaults to `'same-origin'`                                                                                                          |
+| `responseType`        | defaults to `'json'`                                                                                                                 |
+
+## The middleware pipeline
+
+`client.use()` accepts either a bare `Middleware` function (defaults to
+`PluginOrder.normalize`) or a full `HttpPlugin` object with its own `order`. Plugins run
+in `order` order — ties preserve registration order.
+
+**`next()` is re-entrant.** A middleware may call it more than once; each call re-runs
+only the chain _after_ that middleware, never anything that already ran. This is what
+lets `recover` retry a request after recovering credentials without re-running whatever
+is registered outside it (logging, tracing, ...):
+
+```text
+register order:  observe(-200)  →  recover(0)  →  auth(100)  →  transport (adapter)
+
+401 on first attempt:
+  observe runs (once) → recover runs → auth runs → transport throws 401
+                              ↓
+                         recover catches it, runs its recover() callback,
+                         calls next() AGAIN — only auth + transport re-run:
+                              ↓
+                         auth runs (2nd time, fresh credential) → transport → 200
+```
+
+## `PluginOrder`
+
+Public, semver-stable ordering slots — `errorMapper` registers at `normalize`, `recover`
+at `recover`, `auth` at `auth`:
+
+```ts
+export const PluginOrder = {
+  observe: -200,
+  normalize: -100,
+  recover: 0,
+  retry: 50, // reserved for a future retryPlugin — nothing uses this slot yet
+  auth: 100,
+  transport: 200,
+} as const;
+```
+
+A plain `client.use(fn)` (not wrapped in an `HttpPlugin`) defaults to
+`PluginOrder.normalize` too — deliberately not `recover`'s slot, so it never silently
+interleaves with recovery retries purely by registration order. Write your own plugins
+against these constants (e.g. `PluginOrder.auth - 1` to run just inside auth) instead of
+hardcoded numbers.
+
+## `meta` flags
+
+Every resolved `HttpRequest` carries a `meta` bag. `auth`, `recover`, and `errorMapper`
+each read one flag off it automatically, via a shared `metaOptOut(key)` helper — a
+request opts a plugin out by setting that flag to exactly `false`:
+
+```ts
+await client.get('/x', { meta: { auth: false } }); // auth() skips this request
+await client.get('/x', { meta: { recover: false } }); // recover() skips this request
+await client.get('/x', { meta: { mapError: false } }); // errorMapper leaves the error as-is
+```
+
+`metaOptOut('auth')` is `(request) => request.meta.auth === false` — strict equality, so
+`undefined`/`0`/`''`/`null` never opt a request out, only a literal `false` does.
+
+Each plugin also takes its own `options.skip?: (request) => boolean`, which **replaces**
+the default check entirely rather than adding to it — compose the two yourself if you
+need both:
+
+```ts
+import { metaOptOut } from '@lamstack/http-client';
+
+client.use(
+  auth(bearer(source), {
+    skip: (request) => metaOptOut('auth')(request) || request.url.startsWith('/public'),
+  }),
+);
+```
+
+For `recover` specifically, `skip` is independent of `shouldRecover` and is checked
+first, as soon as an error is caught — before `shouldRecover` ever runs. If the opt-out
+were folded into `shouldRecover`'s default instead, overriding `shouldRecover` would
+silently lose the opt-out.
+
+`meta` is also where you can stash your own per-request data for a custom plugin to
+read. Internal plugin state (like `recover`'s attempt/generation counters) uses a
+`Symbol.for(...)` key instead of a string, so it can never collide with anything you put
+here.
+
+## Adapters as an opaque transport contract
+
+```ts
+interface HttpAdapter {
+  name: string;
+  capabilities: { uploadProgress: boolean; downloadProgress: boolean; stream: boolean };
+  send<T>(request: HttpRequest): Promise<HttpResponse<T>>;
+}
+```
+
+Adapters are the only place a transport library is imported — never from the package
+root, so `import { HttpClient } from '@lamstack/http-client'` never pulls in axios or
+adds fetch-specific types to your bundle analysis. Both shipped adapters (`fetchAdapter`,
+`axiosAdapter`) behave identically for the same request — same `HttpResponse` shape on
+success, same `HttpError` code/status on failure — verified by a single shared contract
+test suite run against both. See [API reference](/http-client/api-reference#adapters)
+for their options, and [Writing your own adapter](/http-client/api-reference#writing-your-own-adapter)
+to target something else (React Native's networking stack, `undici` directly, ...).
+
+## `auth` and `recover`: two independent contracts
+
+Two narrow contracts do the work: **`auth`** attaches credentials to every request;
+**`recover`** detects an eligible failure, runs a recovery step, and retries. Neither
+knows anything about the other, and neither is privileged over a plugin you write
+yourself — both are ordinary `HttpPlugin`s registered via `.use()`.
+
+```ts
+type Authenticator = (request: HttpRequest) => Awaitable<HttpRequest>;
+```
+
+`auth()` is deliberately thin: it applies an `Authenticator` to every outgoing request.
+Everything about _how_ (a Bearer token, an API key, a request signature, several
+combined) lives in the `Authenticator` itself — see the built-in `bearer`/`apiKey`/
+`basic`/`allOf` presets in the [API reference](/http-client/api-reference#built-in-authenticators).
+
+`recover`'s only required option is `recover: () => Promise<void>` — a single async step
+run once per cycle, shared by every request queued behind it. It doesn't have to be an
+HTTP call: `firebaseUser.getIdToken(true)`, an OS keychain refresh, or a resync over a
+`BroadcastChannel` all fit the same shape. On an eligible failure (401 by default):
+
+1. If `canRecover` is given and resolves `false`, emits `recovery:unavailable` and
+   rethrows the original error immediately — no cycle attempted.
+2. Otherwise runs `recover()` (deduplicated — see Concurrency below).
+3. Retries the original request via a **re-entrant `next()` call** — never by re-running
+   the pipeline from the top, so `auth` re-runs and picks up the new credential, but
+   nothing registered outside `recover` re-runs.
+4. If `recover()` itself throws: emits `recovery:failed`, and rethrows the **original**
+   request's error with the recovery failure attached via `.cause`.
+
+### Concurrency
+
+If several requests fail at once while a cycle is already in flight, they share that one
+cycle (no duplicate recovery calls) — but each still resolves or rejects independently.
+If the shared cycle fails, every queued request rejects with **its own** original error
+(not one shared value), each carrying the same recovery failure via `.cause`. A request
+that fails _after_ a **different** request's cycle already completed and rotated the
+credential retries directly with it instead of starting a redundant cycle — tracked via
+an internal generation counter, no configuration needed.
+
+### Refresh storms
+
+Without a cooldown, every request that fails while the refresh endpoint itself is down
+would trigger its own brand-new cycle against that same down endpoint, with no ceiling.
+`cooldownMs` (default `1000`; `0` disables it) closes that gap: once a cycle fails, any
+request that would otherwise start a fresh one within `cooldownMs` instead throws its own
+original error immediately — `.cause` set to the most recent recovery failure — and emits
+`recovery:unavailable`, with no attempt against the refresh endpoint at all. A successful
+cycle resets the cooldown immediately.
+
+### Stale retries
+
+The direct retry described under Concurrency is tracked by its own counter, capped by
+`maxStaleRetries` (default `1`) — completely independent of `maxAttempts`. A request that
+gets stale-retried once never spends its `maxAttempts` budget, so if its retry then hits a
+genuine, unrelated 401, it can still start its own recovery cycle. Only _repeated_
+staleness — losing the race to unrelated rotations over and over — is what
+`maxStaleRetries` eventually gives up on.
+
+## Wiring `auth` + `recover` to a token store
+
+There's no built-in session helper yet (see [Roadmap](/http-client#roadmap)) — `auth`/
+`recover` need nothing more than a plain object of your own that satisfies `bearer()`'s
+source contract, `{ getAccessToken(): Awaitable<string | null> }`, plus whatever
+`renew`/`canRenew` shape `recover()`'s options need:
+
+```ts
+function parseAccessToken(payload: unknown): string | null {
+  return (payload as { accessToken?: string } | null)?.accessToken ?? null;
+}
+
+let accessToken: string | null = window.localStorage.getItem('access_token');
+
+const session = {
+  getAccessToken: async () => accessToken,
+  canRenew: async () => Boolean(window.localStorage.getItem('refresh_token')),
+  renew: async () => {
+    const refreshToken = window.localStorage.getItem('refresh_token');
+    const response = await refreshClient.request({
+      url: '/auth/refresh',
+      method: 'POST',
+      body: { refreshToken },
+    });
+    accessToken = parseAccessToken(response.data);
+    if (accessToken) window.localStorage.setItem('access_token', accessToken);
+  },
+  end: async () => {
+    accessToken = null;
+    window.localStorage.removeItem('access_token');
+    window.localStorage.removeItem('refresh_token');
+  },
+};
+
+client.use(recover({ recover: () => session.renew(), canRecover: () => session.canRenew() }));
+client.use(auth(bearer(session)));
+```
+
+`refreshClient` is built via `client.extend({})` — a client sharing the parent's
+adapter/options but starting with no plugins, so the refresh call itself carries neither
+`auth` nor `recover` and can't recurse into its own recovery logic. For a backend that
+issues the refresh token as an HttpOnly cookie instead (access token kept in memory only,
+never persisted), and the full options reference, see
+[API reference](/http-client/api-reference#recover).

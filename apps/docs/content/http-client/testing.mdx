@@ -1,0 +1,111 @@
+# Testing
+
+There are two levels worth testing separately: code that uses a full `HttpClient` (a
+scripted adapter, no real network), and a single plugin/`Middleware` in isolation (no
+`HttpClient` at all).
+
+## Scripted adapters, for code that uses `HttpClient`
+
+Because `HttpAdapter` is a tiny two-property interface, testing code that uses
+`HttpClient` doesn't require mocking `fetch` or `axios` — write a scripted adapter:
+
+```ts
+import type { HttpAdapter, HttpRequest, HttpResponse } from '@lamstack/http-client';
+
+function scriptedAdapter(response: Partial<HttpResponse>): HttpAdapter {
+  return {
+    name: 'scripted',
+    capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+    async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+      return {
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        request,
+        ...response,
+      } as HttpResponse<T>;
+    },
+  };
+}
+
+const client = new HttpClient({ adapter: scriptedAdapter({ data: { id: '1' } }) });
+```
+
+For a scenario spanning several calls (e.g. a 401 followed by a successful retry), script
+a sequence instead of a single fixed response:
+
+```ts
+function scriptedSequence(script: Array<'unauthorized' | Record<string, unknown>>): HttpAdapter {
+  let index = 0;
+  return {
+    name: 'scripted',
+    capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+    async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+      const step = script[Math.min(index, script.length - 1)];
+      index += 1;
+      if (step === 'unauthorized') {
+        throw new HttpError('Unauthorized', { code: 'HTTP_ERROR', status: 401, request });
+      }
+      return { status: 200, statusText: 'OK', headers: {}, request, data: step as T };
+    },
+  };
+}
+```
+
+## `resolve()`, for testing a plugin directly
+
+Testing a `Middleware`/`HttpPlugin` on its own — without a full `HttpClient` or adapter
+at all — needs a real `HttpRequest`, which `resolve()` (the same function `HttpClient`
+calls internally) builds from an `HttpRequestInit`:
+
+```ts
+import { resolve } from '@lamstack/http-client';
+
+const request = resolve({ url: '/x', headers: { 'x-foo': 'bar' } });
+
+const response = await myPlugin.handler(request, async (req) => ({
+  status: 200,
+  statusText: 'OK',
+  headers: {},
+  request: req,
+  data: { ok: true },
+}));
+```
+
+This is exactly how `@lamstack/http-client`'s own tests for `withHeaders`/`withMeta`/
+`metaOptOut` build an `HttpRequest` to assert against, without ever spinning up an
+`HttpClient`.
+
+## Testing recovery concurrency
+
+`recover()`'s dedup/cooldown/stale-retry logic is the highest-risk surface in the
+package, and its own test suite tests it with a `deferred()`-promise pattern — controlling
+exactly when one scripted request "responds" relative to another:
+
+```ts
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+```
+
+A slow adapter awaits `gate.promise` before actually responding, so a test can dispatch a
+request, let a _different_ request complete a full recovery cycle in the meantime, then
+resolve the gate and assert the first request picked up the new credential instead of
+starting a redundant cycle. `cooldownMs`-related tests use `vi.useFakeTimers()` /
+`vi.advanceTimersByTime(...)` rather than real timers.
+
+## Reference
+
+`@lamstack/http-client`'s own test suite
+([`packages/http-client/src`](https://github.com/jakhang/lamstack/tree/main/packages/http-client/src))
+uses exactly these patterns throughout —
+[`plugins/recover.plugin.test.ts`](https://github.com/jakhang/lamstack/blob/main/packages/http-client/src/plugins/recover.plugin.test.ts)
+in particular is the most thorough example of the concurrency/cooldown/stale-retry
+testing pattern above, and
+[`integration.test.ts`](https://github.com/jakhang/lamstack/blob/main/packages/http-client/src/integration.test.ts)
+runs the full `auth` + `recover` + `errorMapper` stack against a real local HTTP server
+via `fetchAdapter()`, for the cases a scripted adapter can't exercise.

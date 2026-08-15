@@ -17,7 +17,7 @@ export const metadata = {
     template: '%s – lamstack',
     default: 'lamstack',
   },
-  description: 'lamstack — a collection of independent, headless React packages.',
+  description: 'lamstack — a collection of independent, headless packages.',
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {

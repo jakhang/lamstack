@@ -81,6 +81,17 @@ describe('basic', () => {
     const request = await authenticator(resolve({ url: '/x' }));
     expect(request.headers.authorization).toBe(`Basic ${btoa('user:pass')}`);
   });
+
+  it('supports non-ASCII credentials (RFC 7617 permits UTF-8) instead of throwing on btoa\'s Latin-1-only encoding', async () => {
+    const authenticator = basic('user', 'mật khẩu');
+    const request = await authenticator(resolve({ url: '/x' }));
+
+    const encoded = request.headers.authorization.replace(/^Basic /, '');
+    const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+    const decoded = new TextDecoder().decode(bytes);
+
+    expect(decoded).toBe('user:mật khẩu');
+  });
 });
 
 describe('allOf', () => {

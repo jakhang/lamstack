@@ -52,7 +52,13 @@ export function apiKey(options: ApiKeyOptions): Authenticator {
 
 /** Attaches a static `Authorization: Basic <base64>` header from a username/password pair. */
 export function basic(username: string, password: string): Authenticator {
-  const token = btoa(`${username}:${password}`);
+  // `btoa` is Latin-1-only and throws on anything outside it, but RFC 7617 permits UTF-8
+  // credentials — encode to UTF-8 bytes first, then feed btoa each byte as its own
+  // Latin-1 code unit (safe: every byte is 0-255), so it never sees a character it can't
+  // represent. `TextEncoder`/`TextDecoder` are plain JS globals in both Node and browsers,
+  // not DOM-only, so this stays typecheckable under the no-DOM build (tsconfig.nodom.json).
+  const bytes = new TextEncoder().encode(`${username}:${password}`);
+  const token = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(''));
   return async (request) => withHeaders(request, { authorization: `Basic ${token}` });
 }
 

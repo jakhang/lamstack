@@ -686,10 +686,17 @@ await client.upload('/files', {
 ```
 
 An existing `FormData` is sent through untouched instead of being rebuilt. `upload()`
-never sets an explicit `Content-Type` — the adapter's transport generates the multipart
-boundary itself. This conversion is `FormBuilder` (also exported from the package root)
-— `client.upload()` is a thin wrapper around `new FormBuilder(fileSerializer).build(data)`;
-construct one directly if you need a `FormData` without going through `HttpClient`.
+**clears** any client-level `Content-Type` default (`{ 'content-type': null }`, same as an
+explicit request-level `null` override elsewhere) rather than merely not setting one of
+its own — without that, a client configured with `headers: { 'Content-Type':
+'application/json' }` (a common default for its other requests) would send the multipart
+`FormData` mislabelled as JSON, with no boundary, and the server would fail to parse it.
+The adapter's transport generates the real multipart boundary itself. An explicit
+per-request `init.headers['content-type']` (e.g. your own multipart boundary) still wins
+— it's layered on _after_ that clearing default, not instead of it. This conversion is
+`FormBuilder` (also exported from the package root) — `client.upload()` is a thin wrapper
+around `new FormBuilder(fileSerializer).build(data)`; construct one directly if you need a
+`FormData` without going through `HttpClient`.
 
 By default, non-primitive values are handled by `WebFileSerializer` (`File`/`Blob`). For
 React Native (no `File`/`Blob`; a `FormData` polyfill that expects

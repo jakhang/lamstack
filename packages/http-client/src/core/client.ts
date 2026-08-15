@@ -97,9 +97,13 @@ export class HttpClient {
   /**
    * Uploads `data` as `multipart/form-data`. A plain object is built into a
    * `FormData` via the configured `fileSerializer` (default `WebFileSerializer`);
-   * an existing `FormData` is sent through as-is. Never sets an explicit
-   * `Content-Type` — the adapter's transport must generate the multipart
-   * boundary itself.
+   * an existing `FormData` is sent through as-is. Clears any client-level
+   * `Content-Type` default (`headers: { 'content-type': null }` — deleted, same as an
+   * explicit request-level `null` override elsewhere) so FormData is never sent
+   * mislabelled as whatever the client's default happened to be, with no multipart
+   * boundary; the adapter's transport generates that boundary itself. An explicit
+   * per-request `init.headers['content-type']` (e.g. a caller-supplied boundary) still
+   * wins — it's layered on *after* the clearing default, not instead of it.
    */
   async upload<T = unknown>(
     url: string,
@@ -107,7 +111,13 @@ export class HttpClient {
     init?: VerbInit,
   ): Promise<T> {
     const body = data instanceof FormData ? data : this.formBuilder.build(data);
-    const response = await this.request<T>({ ...init, url, method: 'POST', body });
+    const response = await this.request<T>({
+      ...init,
+      headers: { 'content-type': null, ...init?.headers },
+      url,
+      method: 'POST',
+      body,
+    });
     return response.data;
   }
 

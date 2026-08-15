@@ -250,6 +250,49 @@ describe('HttpClient — upload()', () => {
 
     expect(calls[0].init.body).toBe(formData);
   });
+
+  it('clears a client-level Content-Type default instead of sending FormData under it (plain-object path)', async () => {
+    const { calls, fetchStub } = captureFetch();
+    const client = new HttpClient({
+      adapter: fetchAdapter({ fetch: fetchStub }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    await client.upload('/x', { name: 'a' });
+
+    expect(calls[0].init.body).toBeInstanceOf(FormData);
+    expect((calls[0].init.headers as Record<string, string>)['content-type']).toBeUndefined();
+  });
+
+  it('clears a client-level Content-Type default instead of sending FormData under it (pre-built FormData path)', async () => {
+    const { calls, fetchStub } = captureFetch();
+    const client = new HttpClient({
+      adapter: fetchAdapter({ fetch: fetchStub }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const formData = new FormData();
+    formData.append('preset', 'value');
+
+    await client.upload('/x', formData);
+
+    expect(calls[0].init.body).toBe(formData);
+    expect((calls[0].init.headers as Record<string, string>)['content-type']).toBeUndefined();
+  });
+
+  it('still honours an explicit per-request Content-Type override (e.g. a caller-supplied multipart boundary)', async () => {
+    const { calls, fetchStub } = captureFetch();
+    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
+
+    await client.upload(
+      '/x',
+      { name: 'a' },
+      { headers: { 'content-type': 'multipart/form-data; boundary=custom' } },
+    );
+
+    expect((calls[0].init.headers as Record<string, string>)['content-type']).toBe(
+      'multipart/form-data; boundary=custom',
+    );
+  });
 });
 
 describe('HttpClient — download()', () => {

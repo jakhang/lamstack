@@ -34,7 +34,7 @@ on top via a single `.use()` API. No plugin shipped with this package — not `a
     - [`auth` and `Authenticator`](#auth-and-authenticator)
     - [Built-in authenticators](#built-in-authenticators)
     - [`recover`](#recover)
-    - [`tokenSession()` — wiring `auth` + `recover` to a token store](#tokensession--wiring-auth--recover-to-a-token-store)
+    - [Wiring `auth` + `recover` to a token store](#wiring-auth--recover-to-a-token-store)
     - [Recovery events (`EventBus`)](#recovery-events-eventbus)
   - [Error handling](#error-handling)
   - [File uploads](#file-uploads)
@@ -358,7 +358,7 @@ const refreshClient = client.extend({}); // no plugins yet — safe to use for t
 
 client.use(
   recover({
-    recover: () => session.renew(), // session: a tokenSession() built on refreshClient — see below
+    recover: () => session.renew(), // session: your own renew/getAccessToken object — see below
   }),
 );
 client.use(auth(bearer(session)));
@@ -374,8 +374,9 @@ override, which layers on top).
 Two independent, narrow contracts do the work: **`auth`** attaches credentials to every
 request; **`recover`** detects an eligible failure, runs a recovery step, and retries.
 Neither knows anything about the other, and neither is privileged over a plugin you
-write yourself. `tokenSession()` (below) is the one place that ties the two together
-around a stored token.
+write yourself. [Wiring `auth` + `recover` to a token store](#wiring-auth--recover-to-a-token-store)
+(below) shows how to tie the two together around a stored token — there's no built-in
+session helper yet (see [Roadmap](#roadmap)), so that's a plain object you write.
 
 ### `auth` and `Authenticator`
 
@@ -400,7 +401,7 @@ _how_ (a Bearer token, an API key, a request signature, several combined) lives 
 import { allOf, apiKey, basic, bearer } from '@lamstack/http-client';
 
 // The common case — a Bearer token from any source with getAccessToken():
-client.use(auth(bearer(session))); // session: a tokenSession() — see below
+client.use(auth(bearer(session))); // session: your own getAccessToken object — see below
 client.use(auth(bearer(session, { header: 'x-api-key', scheme: '' }))); // custom header, no "Bearer " prefix
 client.use(auth(bearer(() => currentToken))); // or a plain function
 
@@ -424,8 +425,9 @@ client.use(
 
 `bearer()` never emits a literal `"Bearer null"` — if its source resolves `null`/no
 token, the header is simply left unset. `bearer()`'s source contract is just
-`{ getAccessToken(): Awaitable<string | null> }` (or a plain function) — a `tokenSession()`
-(below) satisfies it directly, and so does anything else with a `getAccessToken()` method.
+`{ getAccessToken(): Awaitable<string | null> }` (or a plain function) — the session
+object shown below satisfies it directly, and so does anything else with a
+`getAccessToken()` method.
 
 ### `recover`
 
@@ -434,7 +436,7 @@ import { metaOptOut, onStatus, recover } from '@lamstack/http-client';
 
 client.use(
   recover({
-    recover: () => session.renew(), // session: a tokenSession() — see below
+    recover: () => session.renew(), // session: your own renew/getAccessToken object — see below
     shouldRecover: onStatus(401, { exclude: ['/auth/login', '/auth/refresh'] }), // default: onStatus(401)
     skip: metaOptOut('recover'), // default — see meta flags above
     canRecover: () => session.canRenew(), // optional — skips a doomed cycle before it starts
@@ -494,91 +496,76 @@ staleness — losing the race to unrelated rotations over and over — is what
 `maxStaleRetries` eventually gives up on, throwing the original error with no new cycle
 attempted.
 
-### `tokenSession()` — wiring `auth` + `recover` to a token store
+### Wiring `auth` + `recover` to a token store
 
-`tokenSession()` is the one built-in way to tie a stored token to both `auth()` and
-`recover()` — wrap a plain storage object and a renewal callback, get back a
-`TokenSession` that satisfies `bearer()`'s source contract and plugs directly into
-`recover()`'s options:
-
-```ts
-interface TokenStore {
-  getItem(key: string): Awaitable<string | null>;
-  setItem(key: string, value: string): Awaitable<void>;
-  removeItem(key: string): Awaitable<void>;
-}
-
-interface TokenSession {
-  getAccessToken(): Awaitable<string | null>;
-  renew(): Promise<void>;
-  canRenew(): Awaitable<boolean>;
-  save(payload: unknown): Promise<void>; // for feature code to call directly after sign-in
-  end(): Awaitable<void>;
-}
-```
-
-(`Awaitable<T>` is `T | Promise<T>` — every callback may be sync or async. `TokenStore`
-is deliberately minimal — `localStorage`, React Native's `AsyncStorage`, or a plain `Map`
-wrapper all qualify.)
+There's no built-in session helper in `0.1.0` — a first attempt shipped briefly during
+development and was pulled before release to be redesigned (see [Roadmap](#roadmap)).
+Until then, `auth`/`recover` need nothing more than a plain object of your own that
+satisfies `bearer()`'s source contract — `{ getAccessToken(): Awaitable<string | null> }`
+— plus whatever `renew`/`canRenew` shape `recover()`'s options need:
 
 **Backends that return `accessToken`/`refreshToken` in the JSON response body** — the
-refresh token is persisted in `store` and sent back as `{ refreshToken }`:
+refresh token is persisted in `localStorage` and sent back as `{ refreshToken }`:
 
 ```ts
-import { tokenSession } from '@lamstack/http-client';
-
 function parseAccessToken(payload: unknown): string | null {
   return (payload as { accessToken?: string } | null)?.accessToken ?? null;
 }
 
-const session = tokenSession({
-  store: window.localStorage,
-  client: refreshClient, // no auth/recover plugins attached — see extend() above
-  canRenew: async (store) => Boolean(await store.getItem('refresh_token')),
-  renew: async (client, store) => {
-    const refreshToken = await store.getItem('refresh_token');
-    const response = await client.request({
+let accessToken: string | null = window.localStorage.getItem('access_token');
+
+const session = {
+  getAccessToken: async () => accessToken,
+  canRenew: async () => Boolean(window.localStorage.getItem('refresh_token')),
+  renew: async () => {
+    const refreshToken = window.localStorage.getItem('refresh_token');
+    const response = await refreshClient.request({
       url: '/auth/refresh',
       method: 'POST',
       body: { refreshToken },
     });
-    const accessToken = parseAccessToken(response.data);
-    if (accessToken) await store.setItem('access_token', accessToken);
-    return accessToken;
+    accessToken = parseAccessToken(response.data);
+    if (accessToken) window.localStorage.setItem('access_token', accessToken);
   },
-});
+  end: async () => {
+    accessToken = null;
+    window.localStorage.removeItem('access_token');
+    window.localStorage.removeItem('refresh_token');
+  },
+};
 
 // After a successful sign-in response elsewhere in the app:
-await session.save(signInResponse); // uses the same parseAccessToken logic — see save's default below
+accessToken = parseAccessToken(signInResponse);
+if (accessToken) window.localStorage.setItem('access_token', accessToken);
 
 client.use(recover({ recover: () => session.renew(), canRecover: () => session.canRenew() }));
 client.use(auth(bearer(session)));
 ```
 
-`save()` runs whatever callback you pass as `TokenSessionOptions.save` (same shape as
-`renew`, called with `(payload, store)` instead of `(client, store)`) — a no-op if you
-never configure one, since not every strategy needs an explicit "save from sign-in" step.
-
 **Backends that issue the refresh token as an HttpOnly cookie** the browser sends
 automatically — the access token is kept in memory only (never persisted, to limit XSS
-exposure), and `renew`/`save` return the token directly instead of writing it to `store`:
+exposure):
 
 ```ts
-const session = tokenSession({
-  store: window.localStorage, // only stores a "signed in" flag, never a token
-  client: refreshClient,
-  canRenew: async (store) => Boolean(await store.getItem('SIGNED_IN')),
-  renew: async (client, store) => {
-    const response = await client.request({
+let accessToken: string | null = null;
+
+const session = {
+  getAccessToken: async () => accessToken,
+  canRenew: async () => Boolean(window.localStorage.getItem('SIGNED_IN')),
+  renew: async () => {
+    const response = await refreshClient.request({
       url: '/auth/refresh',
       method: 'GET',
       credentials: 'include',
     });
-    await store.setItem('SIGNED_IN', 'true');
-    return parseAccessToken(response.data); // returned directly — never written to store
+    window.localStorage.setItem('SIGNED_IN', 'true');
+    accessToken = parseAccessToken(response.data); // kept in memory only, never persisted
   },
-  onEnd: (store) => store.removeItem('SIGNED_IN'),
-});
+  end: async () => {
+    accessToken = null;
+    window.localStorage.removeItem('SIGNED_IN');
+  },
+};
 
 // auth() doesn't set credentials: 'include' automatically — declare it on the client itself:
 const client = new HttpClient({ adapter: fetchAdapter(), credentials: 'include' });
@@ -586,18 +573,15 @@ client.use(recover({ recover: () => session.renew(), canRecover: () => session.c
 client.use(auth(bearer(session)));
 ```
 
-`renew`/`save` may either write the new access token into `store` and return nothing
-(the session re-reads it from `store` afterward — the first example above), or return
-the token (or `null`) directly, which the session caches without ever touching `store`
-for it (the second example) — required for a strategy that must not persist the access
-token at all. `onEnd` runs in addition to clearing the access token in `end()`, for a
-second piece of state to clean up (a "signed in" flag, a separate refresh token key, ...);
-`end()` isn't called automatically on a failed recovery cycle — wire it through
-`recoveryEvents` yourself, e.g. `events.on('recovery:failed', () => session.end())`.
-
-Nothing above is special-cased — any strategy (a multi-tenant token store, one backed by
-a secure OS keychain, Firebase's `getIdToken`) implements the same `renew`/`canRenew`
-shape and works with `auth(bearer(...))`/`recover(...)` exactly the same way.
+Both examples build `refreshClient` via `client.extend({})` (see [`HttpClient` API](#httpclient-api)
+above) so the refresh call itself carries neither `auth` nor `recover`. Neither
+`renew`/`canRenew`/`end` is special-cased by the plugins — `recover()` only ever calls
+`session.renew()`/`session.canRenew()` because that's what you passed as its
+`recover`/`canRecover` options; `end()` isn't called automatically on a failed recovery
+cycle either, wire it through `recoveryEvents` yourself, e.g.
+`events.on('recovery:failed', () => session.end())`. A multi-tenant token store, one
+backed by a secure OS keychain, or Firebase's `getIdToken` all work the same way — just a
+different `getAccessToken`/`renew`/`canRenew` implementation behind the same shape.
 
 ### Recovery events (`EventBus`)
 
@@ -835,7 +819,7 @@ request settles).
 ## TypeScript
 
 Every public type is exported from the package root (`HttpRequest`, `HttpResponse`,
-`HttpPlugin`, `Authenticator`, `TokenSession`, `RecoveryContext`, ...). Generic type
+`HttpPlugin`, `Authenticator`, `RecoveryContext`, ...). Generic type
 parameters flow through the whole chain: `client.get<User>('/me')` types the resolved
 value; `client.request<User>(init)` types `response.data`;
 `client.post<CreatedUser, CreateUserInput>('/users', input)` types both the body and the
@@ -852,6 +836,11 @@ Not yet implemented:
   honestly; this is where that flips to `true`.
 - **An SSE plugin** — the plugin system is already extensible enough for one (see
   [Writing your own plugin](#writing-your-own-plugin)); it just doesn't ship yet.
+- **A session-layer helper** (`0.2.0`) — a built-in primitive tying a stored token to
+  both `auth()` and `recover()`, so the [hand-written session objects above](#wiring-auth--recover-to-a-token-store)
+  aren't the only option. An earlier version of this shipped briefly during `0.1.0`
+  development and was pulled before release to be redesigned rather than carried forward
+  as-is.
 
 ## Credits
 

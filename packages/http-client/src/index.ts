@@ -42,15 +42,7 @@ export { recover, onStatus } from './plugins/recover.plugin';
 export type { RecoverOptions, RecoveryContext, RecoveryEventMap } from './plugins/recover.plugin';
 
 export { errorMapper } from './plugins/error-mapper.plugin';
-
-export { tokenSession, defaultAccessTokenParser } from './plugins/token-session';
-export type {
-  TokenSession,
-  TokenSessionOptions,
-  TokenStore,
-  TokenResult,
-  AccessTokenParser,
-} from './plugins/token-session';
+export type { ErrorMapperOptions } from './plugins/error-mapper.plugin';
 
 export type { FileSerializer } from './serializers/file-serializer';
 export { WebFileSerializer } from './serializers/web-file.serializer';

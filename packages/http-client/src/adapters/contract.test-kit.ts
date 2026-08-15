@@ -193,9 +193,10 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
       await expect(promise).rejects.toMatchObject({ code: 'CANCELED' });
     });
 
-    it('invalid JSON in a 200 response throws a PARSE_ERROR HttpError', async () => {
+    it('invalid JSON in a 200 response throws a PARSE_ERROR HttpError, with the raw text attached as data', async () => {
       await expect(adapter.send(req({ url: '/invalid-json' }))).rejects.toMatchObject({
         code: 'PARSE_ERROR',
+        data: '{not valid json',
       });
     });
 
@@ -215,7 +216,13 @@ export function runAdapterContract(name: string, makeAdapter: () => HttpAdapter)
       expect((response.data as Blob).type).toBe('application/octet-stream');
     });
 
-    it("responseType: 'stream' throws a clear error, since capabilities.stream is false", async () => {
+    it("responseType: 'stream' throws an HttpError (code: 'UNSUPPORTED'), not a bare Error — every adapter outcome must be an HttpError, per the adapter contract", async () => {
+      await expect(
+        adapter.send(req({ url: '/json', responseType: 'stream' })),
+      ).rejects.toMatchObject({
+        code: 'UNSUPPORTED',
+        status: 0,
+      });
       await expect(adapter.send(req({ url: '/json', responseType: 'stream' }))).rejects.toThrow(
         "does not support responseType: 'stream' (capabilities.stream is false)",
       );

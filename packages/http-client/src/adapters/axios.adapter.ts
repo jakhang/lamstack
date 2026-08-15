@@ -84,8 +84,9 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
     capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
     async send<T = unknown>(request: HttpRequest): Promise<HttpResponse<T>> {
       if (request.responseType === 'stream') {
-        throw new Error(
+        throw new HttpError(
           "axiosAdapter does not support responseType: 'stream' (capabilities.stream is false)",
+          { code: 'UNSUPPORTED', status: 0, request },
         );
       }
 
@@ -151,9 +152,14 @@ export function axiosAdapter(instance: AxiosInstance): HttpAdapter {
         if (!ok && cause instanceof JsonParseFailure) {
           data = cause.rawText;
         } else {
+          // The raw text is the only useful thing a caller has to inspect what the server
+          // actually sent — without it, a 200 with malformed JSON leaves `data` empty, and
+          // the text survives only as `cause.rawText` on a class that isn't exported (no
+          // stable way to read it from outside).
           throw new HttpError('Failed to parse response body', {
             code: 'PARSE_ERROR',
             status: axiosResponse.status,
+            data: cause instanceof JsonParseFailure ? cause.rawText : undefined,
             request,
             cause,
           });

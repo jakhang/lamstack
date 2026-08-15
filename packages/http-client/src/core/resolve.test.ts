@@ -110,6 +110,11 @@ describe('resolve — params', () => {
     const req = resolve({ url: '/x?a=1', params: { b: 2 } });
     expect(req.url).toBe('/x?a=1&b=2');
   });
+
+  it('does not emit a stray "&" when url already ends with "?" (empty query string)', () => {
+    const req = resolve({ url: '/x?', params: { a: 1 } });
+    expect(req.url).toBe('/x?a=1');
+  });
 });
 
 describe('resolve — defaults', () => {

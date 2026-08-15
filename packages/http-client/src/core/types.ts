@@ -16,8 +16,11 @@ export type Awaitable<T> = T | Promise<T>;
 /**
  * Free-form bag for plugin behavior toggles (`auth`, `recover`, `mapError`) and
  * consumer data. Plugin-internal state (e.g. a retry-attempt counter) must use a
- * `Symbol.for('lamstack.http.*')` key instead of a plain string, so it can never
- * collide with an entry a consumer put here themselves.
+ * `symbol` key instead of a plain string, so it can never collide with an entry a
+ * consumer put here themselves — and, for a plugin a consumer might register more than
+ * once on one client (like `recover()`), a fresh `Symbol(...)` created per plugin
+ * instance, not the global-registry `Symbol.for(...)`, so separate instances don't
+ * silently share the same counter.
  */
 export interface HttpMeta {
   auth?: boolean;

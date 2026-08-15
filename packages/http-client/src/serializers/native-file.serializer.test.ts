@@ -15,6 +15,21 @@ describe('NativeFileSerializer', () => {
     expect(serializer.accepts(null)).toBe(false);
   });
 
+  it('rejects a domain object whose "uri" field happens to be a string but isn\'t file-like (e.g. a Spotify URI), instead of misdetecting it as a file', () => {
+    expect(serializer.accepts({ uri: 'spotify:track:6rqhFgbbKwnb9MLmUQDhG6' })).toBe(false);
+  });
+
+  it.each([
+    'file:///storage/emulated/0/photo.jpg',
+    'content://media/external/images/1',
+    'ph://1234-5678',
+    'assets-library://asset/asset.JPG?id=1234',
+    'data:image/png;base64,aGVsbG8=',
+    'https://example.com/photo.jpg',
+  ])('accepts the real React Native file URI scheme %s', (uri) => {
+    expect(serializer.accepts({ uri })).toBe(true);
+  });
+
   // Node's spec-compliant FormData stringifies a plain object passed to append(), unlike
   // React Native's own polyfill — so this asserts on the call, not a real FormData round-trip.
   it('appends a normalized { uri, type, name } object, defaulting type/name when absent', () => {

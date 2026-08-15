@@ -240,8 +240,12 @@ deliberate: if the opt-out were folded into `shouldRecover`'s default instead, o
 
 `meta` is also where you can stash your own per-request data for a custom plugin to
 read. Internal plugin state (like `recover`'s attempt/generation counters) uses a
-`Symbol.for(...)` key instead of a string, specifically so it can never collide with
-anything you put here.
+`Symbol(...)` key instead of a string, specifically so it can never collide with anything
+you put here. `recover()` creates its symbols fresh per call (`Symbol(...)`, not the
+global-registry `Symbol.for(...)`) for the same reason — two `recover()` plugins stacked
+on one client (e.g. an outer one for 401s, an inner one for 419/CSRF) each get their own
+attempt/generation bookkeeping, instead of a `Symbol.for(...)` key silently sharing one
+counter across both instances.
 
 ## Adapters
 
@@ -279,10 +283,10 @@ Wraps global `fetch`. Handles JSON/FormData/Blob/string/ArrayBuffer/typed-array
 (sets `content-type: application/json` only when it has to JSON-stringify a plain
 object — never for `FormData`, so multipart uploads keep their browser/Node-generated
 boundary). Combines your `signal` with an internal timeout-derived one via
-`AbortSignal.any(...)`, which needs **Node 20.3+ or Safari 17.4+** — narrower than this
-package's own `engines.node: ">=20"`. Chrome/Firefox/Edge have supported it since 2023;
-if you must support Node 20.0–20.2 or an older Safari, polyfill `AbortSignal.any` before
-constructing the adapter.
+`AbortSignal.any(...)`, which needs **Node 20.3+ or Safari 17.4+** — this package's own
+`engines.node: ">=20.3.0"` matches that floor exactly. Chrome/Firefox/Edge have supported
+it since 2023; if you must support an older Safari (or a Node build predating `20.3`
+despite the declared floor), polyfill `AbortSignal.any` before constructing the adapter.
 
 ### `axiosAdapter()`
 
@@ -640,7 +644,14 @@ or cancellation — never a raw transport-specific error:
 
 ```ts
 class HttpError<T = unknown> extends Error {
-  code: 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR' | 'UNKNOWN';
+  code:
+    | 'HTTP_ERROR'
+    | 'NETWORK_ERROR'
+    | 'TIMEOUT'
+    | 'CANCELED'
+    | 'PARSE_ERROR'
+    | 'UNSUPPORTED'
+    | 'UNKNOWN';
   status: number; // 0 when there is no HTTP response at all
   data?: T; // the parsed error response body, when there is one
   request: HttpRequest;
@@ -658,6 +669,11 @@ class HttpError<T = unknown> extends Error {
 which normally only happens for a bug in a plugin between them and the adapter. Claiming
 `NETWORK_ERROR` for that would make `isNetworkError` lie and could get a real bug
 silently retried by `recover()`.
+
+`'UNSUPPORTED'` is different from `'UNKNOWN'` — it means the request asked for something
+this adapter instance's `capabilities` already reported it can't do (e.g.
+`responseType: 'stream'` against `capabilities.stream === false`), caught before any
+network activity, not a network/timeout/cancellation outcome or a plugin bug.
 
 ```ts
 try {
@@ -779,8 +795,8 @@ Never build the header object by hand (`{ ...request.headers, 'X-Client-Id': ...
 `withHeaders` normalizes the key the same way `resolve()` does, so a header that differs
 only in case from one already on the request overwrites it instead of adding a duplicate.
 `withMeta(request, meta)` does the equivalent for `meta`, preserving both `string` and
-`Symbol.for(...)` keys already on the request. Both are pure — they return a new request,
-never mutate the one you pass in.
+`symbol` keys already on the request. Both are pure — they return a new request, never
+mutate the one you pass in.
 
 A retry-style plugin that inspects the response _after_ `next()` resolves/rejects:
 

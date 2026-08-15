@@ -83,8 +83,9 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
     capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
     async send<T = unknown>(request: HttpRequest): Promise<HttpResponse<T>> {
       if (request.responseType === 'stream') {
-        throw new Error(
+        throw new HttpError(
           "fetchAdapter does not support responseType: 'stream' (capabilities.stream is false)",
+          { code: 'UNSUPPORTED', status: 0, request },
         );
       }
 
@@ -145,9 +146,14 @@ export function fetchAdapter(options: FetchAdapterOptions = {}): HttpAdapter {
         } catch (cause) {
           if (cause instanceof JsonParseFailure) {
             if (ok) {
+              // The raw text is the only useful thing a caller has to inspect what the
+              // server actually sent — without it, a 200 with malformed JSON leaves both
+              // `data` and `response` empty, and the text survives only as `cause.rawText`
+              // on a class that isn't exported (no stable way to read it from outside).
               throw new HttpError('Failed to parse response body', {
                 code: 'PARSE_ERROR',
                 status: response.status,
+                data: cause.rawText,
                 request,
                 cause,
               });

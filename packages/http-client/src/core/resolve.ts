@@ -53,6 +53,7 @@ function appendParams(
   if (!params || Object.keys(params).length === 0) return url;
   const query = serializer(params);
   if (!query) return url;
+  if (url.endsWith('?')) return `${url}${query}`;
   return url.includes('?') ? `${url}&${query}` : `${url}?${query}`;
 }
 

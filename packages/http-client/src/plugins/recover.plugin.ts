@@ -4,10 +4,6 @@ import { PluginOrder } from '../core/types';
 import type { Awaitable, HttpPlugin, HttpRequest } from '../core/types';
 import type { EventBus } from '../core/event-bus';
 
-const ATTEMPT = Symbol.for('lamstack.http.recoveryAttempt');
-const GENERATION = Symbol.for('lamstack.http.recoveryGeneration');
-const STALE_RETRY = Symbol.for('lamstack.http.staleRetry');
-
 export interface RecoveryContext {
   error: HttpError;
   request: HttpRequest;
@@ -87,18 +83,6 @@ export function onStatus(
   };
 }
 
-function getAttempt(request: HttpRequest): number {
-  return (request.meta[ATTEMPT] as number | undefined) ?? 0;
-}
-
-function getGeneration(request: HttpRequest): number {
-  return (request.meta[GENERATION] as number | undefined) ?? 0;
-}
-
-function getStaleRetry(request: HttpRequest): number {
-  return (request.meta[STALE_RETRY] as number | undefined) ?? 0;
-}
-
 function withCause(error: HttpError, cause: unknown): HttpError {
   return new HttpError(error.message, {
     code: error.code,
@@ -143,6 +127,28 @@ export function recover(options: RecoverOptions): HttpPlugin {
   const shouldRecover = options.shouldRecover ?? onStatus(401);
   const skip = options.skip ?? metaOptOut('recover');
 
+  // Plain Symbol(), not Symbol.for(...): a global-registry symbol is shared by every
+  // recover() instance in the process, so two recover() plugins stacked on one client
+  // (e.g. an outer one for 401s, an inner one for 419/CSRF) would read and write the
+  // *same* meta entry — the inner one could see the outer's attempt/generation counters
+  // and believe its own budget was already spent. A fresh Symbol() per call scopes each
+  // instance's bookkeeping to itself, the same way `inFlight`/`generation` already are.
+  const ATTEMPT = Symbol('lamstack.http.recoveryAttempt');
+  const GENERATION = Symbol('lamstack.http.recoveryGeneration');
+  const STALE_RETRY = Symbol('lamstack.http.staleRetry');
+
+  function getAttempt(request: HttpRequest): number {
+    return (request.meta[ATTEMPT] as number | undefined) ?? 0;
+  }
+
+  function getGeneration(request: HttpRequest): number {
+    return (request.meta[GENERATION] as number | undefined) ?? 0;
+  }
+
+  function getStaleRetry(request: HttpRequest): number {
+    return (request.meta[STALE_RETRY] as number | undefined) ?? 0;
+  }
+
   let inFlight: Promise<void> | null = null;
   let generation = 0;
   let cooldownUntil = 0;
@@ -173,9 +179,11 @@ export function recover(options: RecoverOptions): HttpPlugin {
       // could ever clear again — every later eligible failure would reuse it instead of
       // starting a fresh cycle. Registering this cleanup *after* the assignment, and only
       // clearing if `inFlight` still points at *this* cycle, closes that window.
-      void cycle.catch(() => {}).finally(() => {
-        if (inFlight === cycle) inFlight = null;
-      });
+      void cycle
+        .catch(() => {})
+        .finally(() => {
+          if (inFlight === cycle) inFlight = null;
+        });
     }
     return inFlight;
   }

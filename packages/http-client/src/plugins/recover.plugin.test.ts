@@ -955,3 +955,55 @@ describe('recover — a synchronously-throwing recover() callback', () => {
     expect(onFailed).toHaveBeenCalledTimes(1); // only the first cycle ever failed
   });
 });
+
+describe('recover — two stacked instances on one client', () => {
+  it("an inner recover() (e.g. for 419/CSRF) doesn't read an outer recover()'s (e.g. for 401) attempt/generation counters", async () => {
+    // 401 first (outer's concern) -> 419 next (inner's concern, after outer's retry) ->
+    // 200 (after inner's own retry). scriptedAdapter only knows 'unauthorized' (401) as a
+    // special step, so the 419 is spliced in directly below, between the two real calls
+    // that go through it ('unauthorized' first, then { ok: true }).
+    const main = scriptedAdapter(['unauthorized', { ok: true }]);
+    const adapter = main.adapter;
+    const originalSend = adapter.send.bind(adapter);
+    let callIndex = 0;
+    adapter.send = (async (request: HttpRequest) => {
+      callIndex += 1;
+      if (callIndex === 2) {
+        throw new HttpError('CSRF token expired', { code: 'HTTP_ERROR', status: 419, request });
+      }
+      return originalSend(request);
+    }) as HttpAdapter['send'];
+
+    let outerCalls = 0;
+    let innerCalls = 0;
+    const client = new HttpClient({ adapter });
+    client.use(
+      recover({
+        recover: async () => {
+          outerCalls += 1;
+        },
+        shouldRecover: onStatus(401),
+        maxAttempts: 1,
+        order: PluginOrder.recover,
+      }),
+    );
+    client.use(
+      recover({
+        recover: async () => {
+          innerCalls += 1;
+        },
+        shouldRecover: onStatus(419),
+        maxAttempts: 1,
+        order: PluginOrder.recover + 1,
+      }),
+    );
+
+    const data = await client.get('/x');
+
+    expect(data).toEqual({ ok: true });
+    expect(outerCalls).toBe(1);
+    // If the two instances shared their attempt/generation bookkeeping, the inner
+    // recover() would see the outer's already-spent attempt and never even try.
+    expect(innerCalls).toBe(1);
+  });
+});

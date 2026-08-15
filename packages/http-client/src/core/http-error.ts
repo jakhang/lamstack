@@ -1,7 +1,19 @@
 import type { HttpRequest, HttpResponse } from './types';
 
+/**
+ * `UNSUPPORTED`: the request asked for something this adapter instance's
+ * `capabilities` already reported it can't do (e.g. `responseType: 'stream'` against
+ * `capabilities.stream === false`) — a configuration mismatch caught before any network
+ * activity, not a network/timeout/cancellation outcome.
+ */
 export type HttpErrorCode =
-  'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR' | 'UNKNOWN';
+  | 'HTTP_ERROR'
+  | 'NETWORK_ERROR'
+  | 'TIMEOUT'
+  | 'CANCELED'
+  | 'PARSE_ERROR'
+  | 'UNSUPPORTED'
+  | 'UNKNOWN';
 
 export interface HttpErrorOptions<T> {
   code: HttpErrorCode;

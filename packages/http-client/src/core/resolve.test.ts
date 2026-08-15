@@ -16,6 +16,29 @@ describe('resolve — baseURL', () => {
     const req = resolve({ url: 'https://a.com/x' });
     expect(req.url).toBe('https://a.com/x');
   });
+
+  // `new URL(path, base)` requires an absolute base and throws `TypeError: Invalid URL`
+  // otherwise — but a relative baseURL (e.g. '/api', the default shape for a same-origin
+  // SPA — see the README's extend() example) is a legitimate, documented case, not an
+  // error. Each of these previously threw instead of joining by string.
+  it.each([
+    { baseURL: '/api', url: '/users', expected: '/api/users' },
+    { baseURL: '/api', url: 'users', expected: '/api/users' },
+    { baseURL: '/api/', url: '/users', expected: '/api/users' },
+    { baseURL: '/api/', url: 'users', expected: '/api/users' },
+    { baseURL: 'api', url: '/users', expected: 'api/users' },
+    { baseURL: 'api', url: 'users', expected: 'api/users' },
+    { baseURL: '', url: '/users', expected: '/users' },
+    { baseURL: '', url: 'users', expected: 'users' },
+    { baseURL: '//cdn.example.com', url: '/users', expected: '//cdn.example.com/users' },
+    { baseURL: '//cdn.example.com', url: 'users', expected: '//cdn.example.com/users' },
+  ])(
+    'joins a relative baseURL "$baseURL" with url "$url" by string instead of throwing',
+    ({ baseURL, url, expected }) => {
+      const req = resolve({ url }, { baseURL });
+      expect(req.url).toBe(expected);
+    },
+  );
 });
 
 describe('resolve — slash handling', () => {

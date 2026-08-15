@@ -23,6 +23,12 @@ function resolveUrl(url: string, baseURL: string | undefined): string {
   if (!baseURL || ABSOLUTE_URL.test(url)) return url;
   const base = baseURL.endsWith('/') ? baseURL : `${baseURL}/`;
   const path = url.startsWith('/') ? url.slice(1) : url;
+  // `new URL(path, base)` requires an absolute base and throws otherwise — but a relative
+  // baseURL ('/api', the default shape for a same-origin SPA, or even a protocol-relative
+  // '//cdn.example.com') is a legitimate, documented case (see the README's extend()
+  // example), not an error. Join by string instead; the no-doubled/no-missing-slash
+  // guarantee above (trailing on base, leading on path) already makes that safe.
+  if (!ABSOLUTE_URL.test(baseURL)) return `${base}${path}`;
   return new URL(path, base).toString();
 }
 

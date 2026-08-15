@@ -133,20 +133,21 @@ export interface HttpRequestInit<TBody = unknown> {
 These run exactly once, before any middleware, and are the same regardless of which
 adapter you use:
 
-| Rule                  | Behavior                                                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `baseURL`             | Combined with a relative `url` via `new URL`-style joining                                                                           |
-| Absolute `url`        | Ignores `baseURL` entirely (detected via a leading `scheme://`)                                                                      |
-| Slash handling        | `baseURL: 'https://a.com/api'` + `url: 'users'` (or `'/users'`) → `https://a.com/api/users` — no doubled or missing slash either way |
-| Header precedence     | client-level `headers` ← request-level `headers`, later wins                                                                         |
-| Header deletion       | a `null`/`undefined` header value at the request layer removes a client-level default                                                |
-| Header case           | every header key is normalized to lowercase                                                                                          |
-| `params`              | `null`/`undefined` values omitted; arrays repeat the key (`id=1&id=2`); `Date` values become ISO strings                             |
-| Existing query string | `url: '/x?a=1'` + `params: { b: 2 }` → `/x?a=1&b=2` (merged, not replaced)                                                           |
-| `method`              | defaults to `'GET'`, uppercased                                                                                                      |
-| `timeout`             | defaults to `0` (unlimited)                                                                                                          |
-| `credentials`         | defaults to `'same-origin'`                                                                                                          |
-| `responseType`        | defaults to `'json'`                                                                                                                 |
+| Rule                  | Behavior                                                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseURL`             | Combined with a relative `url` via `new URL`-style joining                                                                                                                  |
+| Relative `baseURL`    | `baseURL: '/api'` (or `''`, or a protocol-relative `'//cdn.example.com'`) joins by string instead of `new URL()`, which requires an absolute base and would otherwise throw |
+| Absolute `url`        | Ignores `baseURL` entirely (detected via a leading `scheme://`)                                                                                                             |
+| Slash handling        | `baseURL: 'https://a.com/api'` + `url: 'users'` (or `'/users'`) → `https://a.com/api/users` — no doubled or missing slash either way, for a relative `baseURL` too          |
+| Header precedence     | client-level `headers` ← request-level `headers`, later wins                                                                                                                |
+| Header deletion       | a `null`/`undefined` header value at the request layer removes a client-level default                                                                                       |
+| Header case           | every header key is normalized to lowercase                                                                                                                                 |
+| `params`              | `null`/`undefined` values omitted; arrays repeat the key (`id=1&id=2`); `Date` values become ISO strings                                                                    |
+| Existing query string | `url: '/x?a=1'` + `params: { b: 2 }` → `/x?a=1&b=2` (merged, not replaced)                                                                                                  |
+| `method`              | defaults to `'GET'`, uppercased                                                                                                                                             |
+| `timeout`             | defaults to `0` (unlimited)                                                                                                                                                 |
+| `credentials`         | defaults to `'same-origin'`                                                                                                                                                 |
+| `responseType`        | defaults to `'json'`                                                                                                                                                        |
 
 ### The middleware pipeline
 

@@ -6,6 +6,7 @@ import type { EventBus } from '../core/event-bus';
 
 const ATTEMPT = Symbol.for('lamstack.http.recoveryAttempt');
 const GENERATION = Symbol.for('lamstack.http.recoveryGeneration');
+const STALE_RETRY = Symbol.for('lamstack.http.staleRetry');
 
 export interface RecoveryContext {
   error: HttpError;
@@ -39,8 +40,21 @@ export interface RecoverOptions {
   skip?: (request: HttpRequest) => boolean;
   /** Optional optimization: skip a doomed recovery attempt before it starts. Without it, a failing `recover()` just throws. */
   canRecover?: () => Awaitable<boolean>;
-  /** Maximum recovery cycles per logical request. Defaults to 1. */
+  /**
+   * Maximum recovery cycles per logical request. Defaults to 1. Independent of
+   * `maxStaleRetries`: a request that retries directly through a stale generation (no
+   * cycle of its own) never spends this budget — only a request that actually triggers or
+   * awaits its own cycle does.
+   */
   maxAttempts?: number;
+  /**
+   * Maximum consecutive stale-generation retries per logical request, before giving up
+   * with the original error and no new cycle. Defaults to 1. Independent of `maxAttempts`
+   * — tracked via its own counter, so a request that gets stale-retried doesn't spend any
+   * of its own `maxAttempts` budget, and can still start a genuine cycle of its own
+   * afterward if its next failure isn't stale.
+   */
+  maxStaleRetries?: number;
   /**
    * Cooldown after a failed cycle, in ms, before another request may start a fresh one.
    * Defaults to `1000`; `0` disables it. Prevents a "refresh storm" — every request that
@@ -81,6 +95,10 @@ function getGeneration(request: HttpRequest): number {
   return (request.meta[GENERATION] as number | undefined) ?? 0;
 }
 
+function getStaleRetry(request: HttpRequest): number {
+  return (request.meta[STALE_RETRY] as number | undefined) ?? 0;
+}
+
 function withCause(error: HttpError, cause: unknown): HttpError {
   return new HttpError(error.message, {
     code: error.code,
@@ -114,7 +132,14 @@ function withCause(error: HttpError, cause: unknown): HttpError {
  * `next()` instead of starting a redundant cycle.
  */
 export function recover(options: RecoverOptions): HttpPlugin {
-  const { recover: runRecovery, canRecover, maxAttempts = 1, events, cooldownMs = 1000 } = options;
+  const {
+    recover: runRecovery,
+    canRecover,
+    maxAttempts = 1,
+    maxStaleRetries = 1,
+    events,
+    cooldownMs = 1000,
+  } = options;
   const shouldRecover = options.shouldRecover ?? onStatus(401);
   const skip = options.skip ?? metaOptOut('recover');
 
@@ -158,32 +183,44 @@ export function recover(options: RecoverOptions): HttpPlugin {
           if (skip(current)) throw error;
 
           const attempt = getAttempt(current);
-          if (attempt >= maxAttempts) throw error;
+          const stale = getGeneration(current) < generation;
+
+          // maxAttempts only gates genuine cycles; maxStaleRetries gates stale retries —
+          // independent counters, so one never spends the other's budget.
+          if (stale) {
+            if (getStaleRetry(current) >= maxStaleRetries) throw error;
+          } else if (attempt >= maxAttempts) {
+            throw error;
+          }
 
           const context: RecoveryContext = { error, request: current, attempt };
           if (!(await shouldRecover(context))) throw error;
 
-          const stale = getGeneration(current) < generation;
-
-          if (!stale) {
-            if (!inFlight && cooldownUntil > 0 && Date.now() < cooldownUntil) {
-              events?.emit('recovery:unavailable', { error });
-              throw withCause(error, lastRecoveryError);
-            }
-
-            if (canRecover && !(await canRecover())) {
-              events?.emit('recovery:unavailable', { error });
-              throw error;
-            }
-
-            try {
-              await runOnce(context);
-            } catch (recoveryError) {
-              throw withCause(error, recoveryError);
-            }
+          if (stale) {
+            // A different request's cycle already rotated the credential since this one
+            // was dispatched — skip straight to retrying with it, no redundant cycle.
+            current = withMeta(current, {
+              [STALE_RETRY]: getStaleRetry(current) + 1,
+              [GENERATION]: generation,
+            });
+            continue;
           }
-          // else: a different request's cycle already rotated the credential since this
-          // one was dispatched — skip straight to retrying with it, no redundant cycle.
+
+          if (!inFlight && cooldownUntil > 0 && Date.now() < cooldownUntil) {
+            events?.emit('recovery:unavailable', { error });
+            throw withCause(error, lastRecoveryError);
+          }
+
+          if (canRecover && !(await canRecover())) {
+            events?.emit('recovery:unavailable', { error });
+            throw error;
+          }
+
+          try {
+            await runOnce(context);
+          } catch (recoveryError) {
+            throw withCause(error, recoveryError);
+          }
 
           current = withMeta(current, { [ATTEMPT]: attempt + 1, [GENERATION]: generation });
         }

@@ -551,6 +551,233 @@ describe('recover — stale generation after an unrelated rotation', () => {
     expect(refreshCallCount).toBe(1);
     expect(aAttempts).toBe(2);
   });
+
+  it('a request that was stale-retried once can still start its own recovery cycle afterward, instead of being blocked by a shared attempt budget', async () => {
+    let validToken = 'token-1';
+    const { adapter: tokenCheckingAdapter } = tokenAwareAdapter(() => validToken);
+    const provider = mutableProvider('token-0');
+
+    let refreshCallCount = 0;
+    const refreshAdapter: HttpAdapter = {
+      name: 'refresh',
+      capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+      async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+        refreshCallCount += 1;
+        validToken = `token-${refreshCallCount + 1}`;
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          request,
+          data: { accessToken: validToken } as T,
+        };
+      },
+    };
+    const refreshClient = new HttpClient({ adapter: refreshAdapter });
+
+    const aResponds = deferred<void>();
+    let aAttempts = 0;
+    const slowAdapter: HttpAdapter = {
+      name: 'slow',
+      capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+      async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+        if (request.url === '/a') {
+          aAttempts += 1;
+          // Only the very first attempt is deliberately hung (to race B's cycle) — every
+          // later attempt resolves straight away, so a real (non-stale) 401 can surface.
+          if (aAttempts === 1) await aResponds.promise;
+        }
+        return tokenCheckingAdapter.send<T>(request);
+      },
+    };
+
+    const client = new HttpClient({ adapter: slowAdapter });
+    client.use(
+      recover({
+        recover: async () => {
+          const response = await refreshClient.request({ url: '/refresh', method: 'POST' });
+          provider.token = (response.data as { accessToken: string }).accessToken;
+        },
+        maxAttempts: 1,
+      }),
+    );
+    client.use(auth(bearer(provider)));
+
+    const aPromise = client.get('/a'); // hangs on its first attempt, still carrying token-0
+
+    // B triggers and completes a full recovery cycle (token-1 -> token-2) while A waits.
+    await client.get('/b');
+    expect(refreshCallCount).toBe(1);
+    expect(validToken).toBe('token-2');
+
+    // A's stale attempt now fails (token-0 doesn't match token-2) and retries directly with
+    // token-2 via the generation check — no cycle of its own yet.
+    aResponds.resolve();
+
+    // Once retried, token-2 is genuinely valid — A resolves successfully, never needing a
+    // cycle of its own. This proves the stale retry didn't consume A's own attempt budget:
+    // if it had, a *third*, truly-invalid-credential 401 (simulated separately below) would
+    // have been blocked outright instead of getting its own chance at recovery.
+    await aPromise;
+    expect(aAttempts).toBe(2);
+    expect(refreshCallCount).toBe(1);
+  });
+
+  it('a request whose stale retry is immediately followed by its own genuine 401 still gets its own recovery cycle (previously consumed by the shared attempt counter)', async () => {
+    let validToken = 'token-1';
+    const { adapter: tokenCheckingAdapter } = tokenAwareAdapter(() => validToken);
+    const provider = mutableProvider('token-0');
+
+    let refreshCallCount = 0;
+    const refreshAdapter: HttpAdapter = {
+      name: 'refresh',
+      capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+      async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+        refreshCallCount += 1;
+        validToken = `token-${refreshCallCount + 1}`;
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          request,
+          data: { accessToken: validToken } as T,
+        };
+      },
+    };
+    const refreshClient = new HttpClient({ adapter: refreshAdapter });
+
+    const aResponds = deferred<void>();
+    let aAttempts = 0;
+    const slowAdapter: HttpAdapter = {
+      name: 'slow',
+      capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+      async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+        if (request.url === '/a') {
+          aAttempts += 1;
+          if (aAttempts === 1) await aResponds.promise;
+          // On A's retry (attempt 2), the token now matches — but simulate the server
+          // rejecting it anyway for an unrelated, genuine reason (e.g. it was also revoked).
+          if (aAttempts === 2) {
+            throw new HttpError('Unauthorized', { code: 'HTTP_ERROR', status: 401, request });
+          }
+        }
+        return tokenCheckingAdapter.send<T>(request);
+      },
+    };
+
+    const client = new HttpClient({ adapter: slowAdapter });
+    client.use(
+      recover({
+        recover: async () => {
+          const response = await refreshClient.request({ url: '/refresh', method: 'POST' });
+          provider.token = (response.data as { accessToken: string }).accessToken;
+        },
+        maxAttempts: 1,
+      }),
+    );
+    client.use(auth(bearer(provider)));
+
+    const aPromise = client.get('/a'); // hangs on its first attempt, still carrying token-0
+
+    await client.get('/b'); // rotates token-1 -> token-2, generation 0 -> 1
+    expect(refreshCallCount).toBe(1);
+
+    aResponds.resolve(); // A's stale attempt fails, retries directly (no cycle) with token-2
+
+    await aPromise; // A's own genuine 401 on attempt 2 must still get its own recovery cycle
+
+    expect(aAttempts).toBe(3);
+    expect(refreshCallCount).toBe(2); // B's cycle + A's own — not blocked by a shared budget
+  });
+
+  it('caps repeated staleness at maxStaleRetries (default 1) — a request that keeps losing the race to unrelated rotations eventually gives up instead of retrying forever', async () => {
+    // Everything — A and the two unrelated "other" requests that force fresh rotations —
+    // shares one client/provider/recover() instance, exactly like the tests above: the
+    // generation counter that staleness detection relies on only lives inside one
+    // recover() closure, so a *different* plugin instance could never make this request
+    // look stale in the first place.
+    let validToken = 'token-0';
+    const { adapter: mainAdapter, calls: mainCalls } = tokenAwareAdapter(() => validToken);
+    const provider = mutableProvider('token-0');
+
+    let refreshCallCount = 0;
+    const refreshAdapter: HttpAdapter = {
+      name: 'refresh',
+      capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+      async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+        refreshCallCount += 1;
+        validToken = `v${refreshCallCount}`;
+        return {
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          request,
+          data: { accessToken: validToken } as T,
+        };
+      },
+    };
+    const refreshClient = new HttpClient({ adapter: refreshAdapter });
+
+    const aGate = deferred<void>();
+    const aGate2 = deferred<void>();
+    let aAttempts = 0;
+    const slowAdapter: HttpAdapter = {
+      name: 'slow',
+      capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+      async send<T>(request: HttpRequest): Promise<HttpResponse<T>> {
+        if (request.url === '/a') {
+          aAttempts += 1;
+          // Only attempts 1 and 2 are held open to race the two unrelated rotations below.
+          // A 3rd attempt (which must never happen once maxStaleRetries is enforced) is left
+          // to resolve immediately, so a pre-fix bug fails this test fast instead of hanging.
+          if (aAttempts === 1) await aGate.promise;
+          else if (aAttempts === 2) await aGate2.promise;
+        }
+        return mainAdapter.send<T>(request);
+      },
+    };
+
+    const client = new HttpClient({ adapter: slowAdapter });
+    client.use(
+      recover({
+        recover: async () => {
+          const response = await refreshClient.request({ url: '/refresh', method: 'POST' });
+          provider.token = (response.data as { accessToken: string }).accessToken;
+        },
+        // Deliberately generous — isolates this test to maxStaleRetries's own cap instead
+        // of also being (coincidentally) capped by the unrelated attempt budget.
+        maxAttempts: 10,
+      }),
+    );
+    client.use(auth(bearer(provider)));
+
+    const aPromise = client.get('/a'); // attempt 1: captures token-0, hangs
+    await tick();
+
+    // Unrelated rotation #1: forces its own genuine cycle by presenting a deliberately
+    // wrong credential — simulating some other force invalidating the session.
+    provider.token = 'external-invalidation-1';
+    await client.get('/c1');
+    expect(refreshCallCount).toBe(1); // validToken/provider.token are now both "v1"
+
+    aGate.resolve(); // attempt 1 (still holding token-0) fails against "v1" — stale, round 1
+    await tick(); // attempt 2 starts, captures the now-correct "v1", hangs again
+
+    // Unrelated rotation #2, same trick — forces a second genuine cycle.
+    provider.token = 'external-invalidation-2';
+    await client.get('/c2');
+    expect(refreshCallCount).toBe(2); // validToken/provider.token are now both "v2"
+
+    aGate2.resolve(); // attempt 2 (still holding "v1") fails against "v2" — stale again
+
+    const error: unknown = await aPromise.catch((e: unknown) => e);
+
+    expect(HttpError.is(error)).toBe(true);
+    expect((error as HttpError).status).toBe(401);
+    expect(aAttempts).toBe(2); // gave up instead of a 3rd, endless stale retry
+    expect(refreshCallCount).toBe(2); // only the two unrelated cycles — never A's own
+    expect(mainCalls.filter((call) => call.url === '/a')).toHaveLength(2);
+  });
 });
 
 describe('recover — cooldown after a failed cycle', () => {

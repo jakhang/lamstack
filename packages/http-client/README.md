@@ -439,6 +439,7 @@ client.use(
     skip: metaOptOut('recover'), // default — see meta flags above
     canRecover: () => session.canRenew(), // optional — skips a doomed cycle before it starts
     maxAttempts: 1, // default — one recovery cycle per logical request
+    maxStaleRetries: 1, // default — see "Stale retries" below; independent of maxAttempts
     cooldownMs: 1000, // default — see "Refresh storms" below; 0 disables it
     events: recoveryEvents, // optional EventBus<RecoveryEventMap> — see below
   }),
@@ -484,6 +485,14 @@ failure via `.cause`. A request that fails _after_ a **different** request's cyc
 already completed and rotated the credential retries directly with it instead of
 starting a redundant cycle — tracked via an internal generation counter, no configuration
 needed.
+
+**Stale retries:** that direct retry (above) is tracked by its own counter, capped by
+`maxStaleRetries` (default `1`) — completely independent of `maxAttempts`. A request that
+gets stale-retried once never spends its `maxAttempts` budget, so if its retry then hits a
+genuine, unrelated 401, it can still start its own recovery cycle. Only _repeated_
+staleness — losing the race to unrelated rotations over and over — is what
+`maxStaleRetries` eventually gives up on, throwing the original error with no new cycle
+attempted.
 
 ### `tokenSession()` — wiring `auth` + `recover` to a token store
 

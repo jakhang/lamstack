@@ -150,7 +150,7 @@ export function recover(options: RecoverOptions): HttpPlugin {
 
   function runOnce(context: RecoveryContext): Promise<void> {
     if (!inFlight) {
-      inFlight = (async () => {
+      const cycle = (async () => {
         try {
           await runRecovery(context);
           generation += 1;
@@ -161,10 +161,21 @@ export function recover(options: RecoverOptions): HttpPlugin {
           lastRecoveryError = error;
           events?.emit('recovery:failed', { error });
           throw error;
-        } finally {
-          inFlight = null;
         }
       })();
+      inFlight = cycle;
+      // Clear by identity, not unconditionally (no `finally` on the IIFE above): if
+      // `runRecovery` throws *synchronously*, the whole IIFE body — including a `finally`
+      // there — would run to completion before this `inFlight = cycle` assignment even
+      // happens, since nothing inside it ever awaited. An unconditional `inFlight = null`
+      // in that `finally` would then be immediately overwritten by `inFlight = cycle`,
+      // permanently wedging `inFlight` on a dead, already-rejected promise that nothing
+      // could ever clear again — every later eligible failure would reuse it instead of
+      // starting a fresh cycle. Registering this cleanup *after* the assignment, and only
+      // clearing if `inFlight` still points at *this* cycle, closes that window.
+      void cycle.catch(() => {}).finally(() => {
+        if (inFlight === cycle) inFlight = null;
+      });
     }
     return inFlight;
   }

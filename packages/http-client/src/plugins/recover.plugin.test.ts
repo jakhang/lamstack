@@ -910,3 +910,48 @@ describe('recover — cooldown after a failed cycle', () => {
     }
   });
 });
+
+describe('recover — a synchronously-throwing recover() callback', () => {
+  it('does not permanently disable recovery — a later, independent request still starts its own cycle and can succeed', async () => {
+    const main = scriptedAdapter(['unauthorized']); // every attempt 401s
+    let recoverCalls = 0;
+    const events = new EventBus<RecoveryEventMap>();
+    const onFailed = vi.fn();
+    events.on('recovery:failed', onFailed);
+
+    const client = new HttpClient({ adapter: main.adapter });
+    client.use(
+      recover({
+        // Deliberately not `async` — a non-async callback that always throws has an
+        // inferred return type of `never`, assignable to `Promise<void>`, so this is
+        // reachable from ordinary, type-checked code (not just a contrived test).
+        recover: () => {
+          recoverCalls += 1;
+          if (recoverCalls === 1) {
+            throw new Error('refresh token missing');
+          }
+          return Promise.resolve();
+        },
+        cooldownMs: 0,
+        events,
+      }),
+    );
+
+    const first: unknown = await client.get('/x').catch((e: unknown) => e);
+    expect(HttpError.is(first)).toBe(true);
+    expect(recoverCalls).toBe(1);
+    expect(onFailed).toHaveBeenCalledTimes(1);
+
+    // A second, independent request must trigger its own fresh cycle — not silently
+    // reuse an already-rejected promise left over from the first, synchronously-thrown
+    // cycle forever.
+    const second: unknown = await client.get('/x').catch((e: unknown) => e);
+    expect(recoverCalls).toBe(2);
+    expect(HttpError.is(second)).toBe(true); // still fails: attempt 2 also gets a 401
+
+    // A third request proves recovery keeps working going forward, not just once more.
+    await client.get('/x').catch((e: unknown) => e);
+    expect(recoverCalls).toBe(3);
+    expect(onFailed).toHaveBeenCalledTimes(1); // only the first cycle ever failed
+  });
+});

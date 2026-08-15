@@ -204,27 +204,38 @@ inside auth) instead of hardcoded numbers.
 
 ### `meta` flags
 
-Every resolved `HttpRequest` carries a `meta` bag. Only `errorMapper` reads a flag on it
-automatically:
+Every resolved `HttpRequest` carries a `meta` bag. `auth`, `recover`, and `errorMapper`
+each read one flag off it automatically, via a shared `metaOptOut(key)` helper — a request
+opts a plugin out by setting that flag to exactly `false`:
 
 ```ts
+await client.get('/x', { meta: { auth: false } }); // auth() skips this request
+await client.get('/x', { meta: { recover: false } }); // recover() skips this request
 await client.get('/x', { meta: { mapError: false } }); // errorMapper leaves the error as-is
 ```
 
-`auth`/`recover` don't read any `meta` flag automatically — both are fully generic
-(`options.skip` / `shouldRecover`), so a per-request opt-out is something you compose
-into that callback yourself:
+`metaOptOut('auth')` is `(request) => request.meta.auth === false` — strict equality, so
+`undefined`/`0`/`''`/`null` never opt a request out, only a literal `false` does.
+
+Each plugin also takes its own `options.skip?: (request) => boolean`, which **replaces**
+the default check entirely rather than adding to it. To keep the default and add your own
+condition, compose them yourself:
 
 ```ts
+import { metaOptOut } from '@lamstack/http-client';
+
 client.use(
-  recover({
-    recover: renewSession,
-    shouldRecover: (ctx) => ctx.request.meta.recover !== false && onStatus(401)(ctx),
+  auth(bearer(source), {
+    skip: (request) => metaOptOut('auth')(request) || request.url.startsWith('/public'),
   }),
 );
-
-await client.get('/x', { meta: { recover: false } }); // this request opts out
 ```
+
+For `recover` specifically, `skip` is independent of `shouldRecover` and is checked
+first, as soon as an error is caught — before `shouldRecover` ever runs. That's
+deliberate: if the opt-out were folded into `shouldRecover`'s default instead, overriding
+`shouldRecover` would silently lose the opt-out. `shouldRecover` keeps its own
+`onStatus(401)` default no matter what `skip` does.
 
 `meta` is also where you can stash your own per-request data for a custom plugin to
 read. Internal plugin state (like `recover`'s attempt/generation counters) uses a
@@ -419,12 +430,13 @@ token, the header is simply left unset. `bearer()`'s source contract is just
 ### `recover`
 
 ```ts
-import { onStatus, recover } from '@lamstack/http-client';
+import { metaOptOut, onStatus, recover } from '@lamstack/http-client';
 
 client.use(
   recover({
     recover: () => session.renew(), // session: a tokenSession() — see below
     shouldRecover: onStatus(401, { exclude: ['/auth/login', '/auth/refresh'] }), // default: onStatus(401)
+    skip: metaOptOut('recover'), // default — see meta flags above
     canRecover: () => session.canRenew(), // optional — skips a doomed cycle before it starts
     maxAttempts: 1, // default — one recovery cycle per logical request
     events: recoveryEvents, // optional EventBus<RecoveryEventMap> — see below
@@ -437,7 +449,10 @@ run once per cycle, shared by every request queued behind it. It doesn't have to
 HTTP call: `firebaseUser.getIdToken(true)`, an OS keychain refresh, or a resync over a
 `BroadcastChannel` all fit the same shape.
 
-On an eligible failure (401 by default, via `shouldRecover`):
+`skip` is checked first, as soon as an error is caught — before `shouldRecover` runs, and
+independent of it (see [meta flags](#meta-flags) above for why the two are kept separate).
+
+On an eligible failure (401 by default, via `shouldRecover`, once `skip` has let it through):
 
 1. If `canRecover` is given and resolves `false`, emits `recovery:unavailable` and
    rethrows the original error immediately — no cycle attempted.

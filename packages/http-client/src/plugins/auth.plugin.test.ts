@@ -77,4 +77,42 @@ describe('auth', () => {
 
     expect(authenticator).toHaveBeenCalledTimes(1);
   });
+
+  it('skips by default when meta.auth is false, with no options.skip passed', async () => {
+    const { fetchStub } = captureFetch();
+    const authenticator = vi.fn<Authenticator>(async (request) => request);
+    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
+    client.use(auth(authenticator));
+
+    await client.get('/x', { meta: { auth: false } });
+
+    expect(authenticator).not.toHaveBeenCalled();
+  });
+
+  it('runs the authenticator by default when meta.auth is not set', async () => {
+    const { fetchStub } = captureFetch();
+    const authenticator = vi.fn<Authenticator>(async (request) => request);
+    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
+    client.use(auth(authenticator));
+
+    await client.get('/x');
+
+    expect(authenticator).toHaveBeenCalledTimes(1);
+  });
+
+  it('a custom options.skip replaces the default meta.auth check entirely — meta.auth is ignored once skip is passed', async () => {
+    const { fetchStub } = captureFetch();
+    const authenticator = vi.fn<Authenticator>(async (request) => request);
+    const client = new HttpClient({ adapter: fetchAdapter({ fetch: fetchStub }) });
+    client.use(auth(authenticator, { skip: () => false }));
+
+    await client.get('/x', { meta: { auth: false } });
+
+    expect(authenticator).toHaveBeenCalledTimes(1);
+  });
+
+  it('supports a custom order, defaulting to PluginOrder.auth', async () => {
+    expect(auth(async (request) => request).order).toBe(100);
+    expect(auth(async (request) => request, { order: 5 }).order).toBe(5);
+  });
 });

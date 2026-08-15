@@ -18,3 +18,13 @@ export function withHeaders(request: HttpRequest, headers: HeadersInput): HttpRe
 export function withMeta(request: HttpRequest, meta: HttpMeta): HttpRequest {
   return { ...request, meta: { ...request.meta, ...meta } };
 }
+
+/**
+ * A `skip` predicate reading an opt-out flag from `meta`: `true` (skip the plugin) only
+ * when `meta[key] === false` exactly — `undefined`/`0`/`''`/`null` do not opt out, so a
+ * `meta` bag that simply never touched `key` behaves the same as one that set it to a
+ * non-`false` value.
+ */
+export function metaOptOut(key: keyof HttpMeta): (request: HttpRequest) => boolean {
+  return (request) => request.meta[key] === false;
+}

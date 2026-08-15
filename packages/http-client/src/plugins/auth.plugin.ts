@@ -1,3 +1,4 @@
+import { metaOptOut } from '../core/request';
 import { PluginOrder } from '../core/types';
 import type { Awaitable, HttpPlugin, HttpRequest } from '../core/types';
 
@@ -5,8 +6,15 @@ import type { Awaitable, HttpPlugin, HttpRequest } from '../core/types';
 export type Authenticator = (request: HttpRequest) => Awaitable<HttpRequest>;
 
 export interface AuthOptions {
-  /** Skip authentication for requests matching this predicate (e.g. a login endpoint). */
+  /**
+   * Skip authentication for requests matching this predicate (e.g. a login endpoint).
+   * Defaults to `metaOptOut('auth')` (skips when `meta.auth === false`). Passing your
+   * own `skip` **replaces** the default entirely rather than adding to it — to keep
+   * both, compose: `skip: (req) => metaOptOut('auth')(req) || req.url.startsWith('/public')`.
+   */
   skip?: (request: HttpRequest) => boolean;
+  /** Defaults to `PluginOrder.auth`. */
+  order?: number;
 }
 
 /**
@@ -17,11 +25,13 @@ export interface AuthOptions {
  * for the built-in presets (`bearer`, `apiKey`, `basic`, `allOf`).
  */
 export function auth(authenticator: Authenticator, options: AuthOptions = {}): HttpPlugin {
+  const skip = options.skip ?? metaOptOut('auth');
+
   return {
     name: 'auth',
-    order: PluginOrder.auth,
+    order: options.order ?? PluginOrder.auth,
     handler: async (request, next) => {
-      if (options.skip?.(request)) return next(request);
+      if (skip(request)) return next(request);
       return next(await authenticator(request));
     },
   };

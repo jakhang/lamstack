@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolve } from './resolve';
-import { withHeaders, withMeta } from './request';
+import { metaOptOut, withHeaders, withMeta } from './request';
 
 describe('withHeaders', () => {
   it('lowercases new header keys', () => {
@@ -86,5 +86,32 @@ describe('withMeta', () => {
     expect(updated.url).toBe(request.url);
     expect(updated.timeout).toBe(500);
     expect(updated.headers).toBe(request.headers);
+  });
+});
+
+describe('metaOptOut', () => {
+  it('returns a predicate that is true when meta[key] is exactly false', () => {
+    const skip = metaOptOut('auth');
+    const request = resolve({ url: '/x', meta: { auth: false } });
+    expect(skip(request)).toBe(true);
+  });
+
+  it('is false when meta[key] is undefined (not set)', () => {
+    const skip = metaOptOut('auth');
+    const request = resolve({ url: '/x' });
+    expect(skip(request)).toBe(false);
+  });
+
+  it('is false for other falsy values — 0, "", null — not just anything falsy', () => {
+    const skip = metaOptOut('auth');
+    expect(skip(resolve({ url: '/x', meta: { auth: 0 as unknown as boolean } }))).toBe(false);
+    expect(skip(resolve({ url: '/x', meta: { auth: '' as unknown as boolean } }))).toBe(false);
+    expect(skip(resolve({ url: '/x', meta: { auth: null as unknown as boolean } }))).toBe(false);
+  });
+
+  it('is false when meta[key] is true', () => {
+    const skip = metaOptOut('auth');
+    const request = resolve({ url: '/x', meta: { auth: true } });
+    expect(skip(request)).toBe(false);
   });
 });

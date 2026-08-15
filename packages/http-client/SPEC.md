@@ -209,19 +209,27 @@ purely by registration order.
 
 ```ts
 export interface HttpMeta {
-  auth?: boolean; // conventional name for a caller's own auth() `skip` predicate to check — not read automatically
-  mapError?: boolean; // false → errorMapper leaves the error untouched (read automatically)
-  recover?: boolean; // conventional name for a caller's own shouldRecover to check — not read automatically
+  auth?: boolean; // false → auth() skips this request (read automatically via metaOptOut('auth'))
+  mapError?: boolean; // false → errorMapper leaves the error untouched (read automatically via metaOptOut('mapError'))
+  recover?: boolean; // false → recover() skips this request (read automatically via metaOptOut('recover'))
   [key: string]: unknown;
   [key: symbol]: unknown;
 }
 ```
 
-`mapError` is the only flag `errorMapper` reads itself. `auth`/`recover` are _not_ read
-automatically by `auth()`/`recover()` as of v3 — both plugins are fully generic
-(`options.skip`/`shouldRecover`), so a per-request opt-out is expressed by composing it
-into that callback yourself, e.g. `shouldRecover: (ctx) => ctx.request.meta.recover !== false && onStatus(401)(ctx)`.
-The field names remain a documented convention for doing so.
+All three flags are read automatically. Each of `auth()`/`recover()`/`errorMapper()` takes
+a symmetric `options.skip?: (request: HttpRequest) => boolean`, defaulting to
+`metaOptOut('auth')`/`metaOptOut('recover')`/`metaOptOut('mapError')` respectively —
+`metaOptOut(key)` returns `(request) => request.meta[key] === false`, a strict-equality
+check so `undefined`/`0`/`''`/`null` never opt a request out. Passing your own `skip`
+**replaces** the plugin's default entirely rather than adding to it; composing both is on
+the caller, e.g. `skip: (req) => metaOptOut('recover')(req) || req.url.startsWith('/x')`.
+
+For `recover()` specifically, `skip` is independent of `shouldRecover` and is checked
+first, as soon as the error is caught — before `shouldRecover` ever runs. Folding the
+opt-out into `shouldRecover`'s default instead would mean a caller who overrides
+`shouldRecover` silently loses the opt-out; keeping the two gates separate means
+`shouldRecover` keeps its own `onStatus(401)` default regardless of what `skip` does.
 
 Plugin-internal state (e.g. `recover()`'s attempt/generation counters) must use
 `Symbol.for('lamstack.http.*')` keys, never plain strings, so it can never collide with
@@ -369,7 +377,7 @@ table below and the note after it.
 | `TokenProvider.decorate` (called by `auth` before the header)                                     | Deleted from the call path — `auth()` no longer calls it. A cookie strategy sets `credentials: 'include'` on `HttpClientOptions` instead (was a real bug in v2: `decorate` ran _after_ the `meta.auth === false` skip check, so an opted-out request also silently lost `credentials: 'include'`)                                                                                                    |
 | `refresh({ tokenProvider, refreshClient, shouldRefresh, ... })`                                   | `recover({ recover, canRecover?, shouldRecover?, maxAttempts?, events? })` — `recover: (context) => Promise<void>` is the only required contract; the callback decides how renewal happens (an HTTP request, `firebaseUser.getIdToken(true)`, a BroadcastChannel resync, ...)                                                                                                                        |
 | `defaultRefreshPolicy({ statuses?, excludePaths? })`                                              | `onStatus(status, { exclude? })` — `recover()`'s `shouldRecover` default                                                                                                                                                                                                                                                                                                                             |
-| `HttpMeta.refresh`                                                                                | `HttpMeta.recover` — neither this nor `HttpMeta.auth` is read automatically anymore; a per-request opt-out is composed into `shouldRecover`/`options.skip` yourself (§2.5)                                                                                                                                                                                                                           |
+| `HttpMeta.refresh`                                                                                | `HttpMeta.recover` — read automatically via `recover()`'s default `skip: metaOptOut('recover')`, independent of and checked before `shouldRecover` (§2.5)                                                                                                                                                                                                                                            |
 | `refresh` plugin auto-calling `tokenProvider.clear()` on failure/`canRefresh() === false`         | `recover()` calls no cleanup itself — it only emits `recovery:failed`/`recovery:unavailable`; the consumer wires `events.on('recovery:failed', () => session.end())`                                                                                                                                                                                                                                 |
 | `HttpEventBus` (`unauthorized`/`token:refreshed`/`token:refresh-failed`)                          | `EventBus<RecoveryEventMap>` (`recovery:succeeded`/`recovery:failed`/`recovery:unavailable`) — no `unauthorized` event; `recovery:unavailable` covers the old `canRefresh() === false` case                                                                                                                                                                                                          |
 | (new in v3) redundant cycle for a stale in-flight request                                         | A generation counter in `recover()`: bumped each time a cycle succeeds; a request whose failure is caught with an older generation than current retries directly via `next()` instead of starting another cycle                                                                                                                                                                                      |

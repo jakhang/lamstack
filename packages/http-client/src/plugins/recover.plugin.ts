@@ -1,5 +1,5 @@
 import { HttpError } from '../core/http-error';
-import { withMeta } from '../core/request';
+import { metaOptOut, withMeta } from '../core/request';
 import { PluginOrder } from '../core/types';
 import type { Awaitable, HttpPlugin, HttpRequest } from '../core/types';
 import type { EventBus } from '../core/event-bus';
@@ -29,6 +29,14 @@ export interface RecoverOptions {
   recover: (context: RecoveryContext) => Promise<void>;
   /** Decides whether a given failure is eligible for recovery. Defaults to `onStatus(401)`. */
   shouldRecover?: (context: RecoveryContext) => Awaitable<boolean>;
+  /**
+   * Skip recovery entirely for requests matching this predicate, checked as soon as the
+   * error is caught — before `shouldRecover` runs, and independent of it. Defaults to
+   * `metaOptOut('recover')` (skips when `meta.recover === false`). Passing your own `skip`
+   * **replaces** the default entirely rather than adding to it — to keep both, compose:
+   * `skip: (req) => metaOptOut('recover')(req) || req.url.startsWith('/x')`.
+   */
+  skip?: (request: HttpRequest) => boolean;
   /** Optional optimization: skip a doomed recovery attempt before it starts. Without it, a failing `recover()` just throws. */
   canRecover?: () => Awaitable<boolean>;
   /** Maximum recovery cycles per logical request. Defaults to 1. */
@@ -99,6 +107,7 @@ function withCause(error: HttpError, cause: unknown): HttpError {
 export function recover(options: RecoverOptions): HttpPlugin {
   const { recover: runRecovery, canRecover, maxAttempts = 1, events } = options;
   const shouldRecover = options.shouldRecover ?? onStatus(401);
+  const skip = options.skip ?? metaOptOut('recover');
 
   let inFlight: Promise<void> | null = null;
   let generation = 0;
@@ -132,6 +141,7 @@ export function recover(options: RecoverOptions): HttpPlugin {
           return await next(current);
         } catch (caught) {
           const error = HttpError.from(caught, current);
+          if (skip(current)) throw error;
 
           const attempt = getAttempt(current);
           if (attempt >= maxAttempts) throw error;

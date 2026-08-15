@@ -53,4 +53,20 @@ describe('errorMapper', () => {
     expect(HttpError.is(error)).toBe(true);
     expect((error as HttpError).status).toBe(500);
   });
+
+  it('a custom skip replaces the default meta.mapError check entirely — meta.mapError is ignored once skip is passed', async () => {
+    const client = new HttpClient({ adapter: failingAdapter(422, { reason: 'invalid' }) });
+    client.use(errorMapper(() => new DomainError('mapped'), { skip: () => false }));
+
+    const error: unknown = await client
+      .get('/x', { meta: { mapError: false } })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(DomainError);
+  });
+
+  it('supports a custom order, defaulting to PluginOrder.normalize', async () => {
+    expect(errorMapper((error) => error).order).toBe(-100);
+    expect(errorMapper((error) => error, { order: 5 }).order).toBe(5);
+  });
 });

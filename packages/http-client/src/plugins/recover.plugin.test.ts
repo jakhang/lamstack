@@ -203,7 +203,7 @@ describe('recover — single recovery-and-retry', () => {
     expect(onUnavailable.mock.calls[0][0].error).toBeInstanceOf(HttpError);
   });
 
-  it('skips recovery entirely when the caller composes shouldRecover to honor meta.recover === false', async () => {
+  it('skips recovery entirely by default when meta.recover is false, with no options.skip passed', async () => {
     const main = scriptedAdapter(['unauthorized']);
     const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
     const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
@@ -214,14 +214,74 @@ describe('recover — single recovery-and-retry', () => {
         recover: async () => {
           await refreshClient.request({ url: '/refresh', method: 'POST' });
         },
-        shouldRecover: (context) =>
-          context.request.meta.recover !== false && onStatus(401)(context),
       }),
     );
 
     await expect(client.get('/x', { meta: { recover: false } })).rejects.toMatchObject({
       status: 401,
     });
+    expect(refreshMock.calls).toHaveLength(0);
+  });
+
+  it('attempts recovery by default when meta.recover is not set', async () => {
+    const main = scriptedAdapter(['unauthorized', { ok: true }]);
+    const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
+    const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
+
+    const client = new HttpClient({ adapter: main.adapter });
+    client.use(
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+      }),
+    );
+
+    await client.get('/x');
+
+    expect(refreshMock.calls).toHaveLength(1);
+  });
+
+  it('a custom options.skip replaces the default meta.recover check entirely — meta.recover is ignored once skip is passed', async () => {
+    const main = scriptedAdapter(['unauthorized', { ok: true }]);
+    const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
+    const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
+
+    const client = new HttpClient({ adapter: main.adapter });
+    client.use(
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+        skip: () => false,
+      }),
+    );
+
+    await client.get('/x', { meta: { recover: false } });
+
+    expect(refreshMock.calls).toHaveLength(1);
+  });
+
+  it('skip is checked before shouldRecover — shouldRecover is never called when skip is true', async () => {
+    const main = scriptedAdapter(['unauthorized']);
+    const refreshMock = scriptedAdapter([{ accessToken: 'new-token' }]);
+    const refreshClient = new HttpClient({ adapter: refreshMock.adapter });
+    const shouldRecover = vi.fn(() => true);
+
+    const client = new HttpClient({ adapter: main.adapter });
+    client.use(
+      recover({
+        recover: async () => {
+          await refreshClient.request({ url: '/refresh', method: 'POST' });
+        },
+        shouldRecover,
+        skip: () => true,
+      }),
+    );
+
+    await expect(client.get('/x')).rejects.toMatchObject({ status: 401 });
+
+    expect(shouldRecover).not.toHaveBeenCalled();
     expect(refreshMock.calls).toHaveLength(0);
   });
 });

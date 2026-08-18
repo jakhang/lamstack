@@ -2,8 +2,10 @@ import { Tabs } from 'nextra/components';
 
 # lamstack
 
-A collection of independent, headless React packages. MIT licensed. Each package installs
-on its own and only depends on `@lamstack/react-core` — never on a sibling feature package.
+A collection of independent, headless packages. MIT licensed. Each React package installs
+on its own and only depends on `@lamstack/react-core` — never on a sibling feature
+package. `@lamstack/http-client` has no React dependency at all — it works in any
+JavaScript runtime.
 
 <Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tabs.Tab>
@@ -35,5 +37,8 @@ on its own and only depends on `@lamstack/react-core` — never on a sibling fea
 - [`@lamstack/react-initializer`](/initializer) — headless app-startup orchestrator
   (`<Initializer>` runs a dependency graph of async tasks, with retry, timeout, and
   critical/non-critical failure handling).
+- [`@lamstack/http-client`](/http-client) — framework-agnostic HTTP client core with a
+  pluggable middleware pipeline, `fetch`/`axios` adapters, and `auth`/`recover`/
+  `errorMapper` plugins. No React dependency.
 
 More packages (data, ...) are planned.

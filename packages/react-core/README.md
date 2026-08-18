@@ -3,7 +3,7 @@
 Shared hooks used internally by `@lamstack/react-*` packages. Not feature-specific — usable
 standalone in any React 18+ project.
 
-Docs: **[omnireact-six.vercel.app](https://omnireact-six.vercel.app)**
+Docs: **[lamstack-docs.vercel.app](https://lamstack-docs.vercel.app)**
 
 ## Install
 

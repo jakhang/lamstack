@@ -50,7 +50,7 @@ function DeleteButton() {
 ```
 
 Full docs, live demos (Tailwind CSS / MUI / shadcn-ui), and API reference:
-**[omnireact-six.vercel.app/dialog](https://omnireact-six.vercel.app/dialog)**
+**[lamstack-docs.vercel.app/dialog](https://lamstack-docs.vercel.app/dialog)**
 
 ## Credits
 

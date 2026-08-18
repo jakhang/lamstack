@@ -1,0 +1,99 @@
+{
+  "name": "@lamstack/http-client",
+  "version": "0.1.0",
+  "description": "Framework-agnostic HTTP client core with a pluggable middleware pipeline — no hard dependency on axios or fetch.",
+  "keywords": [
+    "http",
+    "fetch",
+    "axios",
+    "middleware",
+    "headless",
+    "lamstack"
+  ],
+  "license": "MIT",
+  "author": "Ja Khang",
+  "homepage": "https://lamstack-docs.vercel.app/http-client",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jakhang/lamstack.git",
+    "directory": "packages/http-client"
+  },
+  "bugs": {
+    "url": "https://github.com/jakhang/lamstack/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./adapters/fetch": {
+      "import": {
+        "types": "./dist/adapters/fetch.d.ts",
+        "default": "./dist/adapters/fetch.js"
+      },
+      "require": {
+        "types": "./dist/adapters/fetch.d.cts",
+        "default": "./dist/adapters/fetch.cjs"
+      }
+    },
+    "./adapters/axios": {
+      "import": {
+        "types": "./dist/adapters/axios.d.ts",
+        "default": "./dist/adapters/axios.js"
+      },
+      "require": {
+        "types": "./dist/adapters/axios.d.cts",
+        "default": "./dist/adapters/axios.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "adapters/fetch": [
+        "./dist/adapters/fetch.d.ts"
+      ],
+      "adapters/axios": [
+        "./dist/adapters/axios.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20.3.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.nodom.json"
+  },
+  "devDependencies": {
+    "axios": "^1.7.9"
+  },
+  "peerDependencies": {
+    "axios": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "axios": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

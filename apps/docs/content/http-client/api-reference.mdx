@@ -1,0 +1,430 @@
+# API Reference
+
+## `HttpClient`
+
+```ts
+new HttpClient({
+  adapter, // HttpAdapter — required
+  baseURL, // string?
+  headers, // HeadersInput?
+  timeout, // number?
+  credentials, // 'omit' | 'same-origin' | 'include'?
+  responseType, // ResponseType?
+  paramsSerializer, // (params) => string?
+  fileSerializer, // FileSerializer? — default WebFileSerializer, see Serializers below
+});
+```
+
+| Method                           | Returns                    | Notes                                                                                                                                                                  |
+| -------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `use(pluginOrMiddleware)`        | `this`                     | Registers a plugin — chainable                                                                                                                                         |
+| `request<T>(init)`               | `Promise<HttpResponse<T>>` | The only method returning the full response, not just `data`                                                                                                           |
+| `get<T>(url, init?)`             | `Promise<T>`               |                                                                                                                                                                        |
+| `delete<T>(url, init?)`          | `Promise<T>`               |                                                                                                                                                                        |
+| `head(url, init?)`               | `Promise<HttpHeaders>`     | Returns the response headers directly                                                                                                                                  |
+| `post<T, B>(url, body?, init?)`  | `Promise<T>`               |                                                                                                                                                                        |
+| `put<T, B>(url, body?, init?)`   | `Promise<T>`               |                                                                                                                                                                        |
+| `patch<T, B>(url, body?, init?)` | `Promise<T>`               |                                                                                                                                                                        |
+| `upload<T>(url, data, init?)`    | `Promise<T>`               | `data` is a plain object or an existing `FormData` — see [Serializers](#serializers)                                                                                   |
+| `download(url, init?)`           | `Promise<Blob>`            | Forces `responseType: 'blob'`                                                                                                                                          |
+| `extend(options?)`               | `HttpClient`               | New client, options merged over the parent's, **inheriting the plugins registered so far** (a snapshot — later `.use()` calls on either client don't affect the other) |
+
+`extend()` is what you use to build a client for `recover()`'s own callback to call the
+refresh endpoint with — call it _before_ registering `auth`/`recover` on the main client,
+so the extended client inherits neither and can't recurse into its own recovery logic.
+Every field on its options falls back to the parent's via `??`, so passing a field as
+explicit `undefined` doesn't unset it, and passing `headers` replaces the parent's
+wholesale rather than merging with them (unlike a per-request `headers` override, which
+layers on top).
+
+## `resolve()`
+
+```ts
+function resolve<TBody>(
+  init: HttpRequestInit<TBody>,
+  defaults?: ResolveDefaults,
+): HttpRequest<TBody>;
+```
+
+The function `HttpClient` calls internally to turn an `HttpRequestInit` into the
+immutable `HttpRequest` every plugin sees — see
+[Concepts: the request lifecycle](/http-client/concepts#the-request-lifecycle) for the
+full resolution rules. Exported so you can build a real `HttpRequest` for
+[testing a plugin directly](/http-client/testing), without a full `HttpClient`.
+
+## `withHeaders()` / `withMeta()` / `metaOptOut()`
+
+```ts
+function withHeaders(request: HttpRequest, headers: HeadersInput): HttpRequest;
+function withMeta(request: HttpRequest, meta: HttpMeta): HttpRequest;
+function metaOptOut(key: keyof HttpMeta): (request: HttpRequest) => boolean;
+```
+
+Pure helpers for writing your own plugin — see
+[Writing your own plugin](#writing-your-own-plugin) below. `withHeaders`/`withMeta` never
+mutate the request passed in; both return a new one, following the same normalization
+rules `resolve()` itself uses (header keys lowercased, a `null`/`undefined` value deletes
+an existing key). `metaOptOut(key)` is `(request) => request.meta[key] === false` —
+strict equality, used as the default `skip` for `auth`/`recover`/`errorMapper` (see
+[Concepts: `meta` flags](/http-client/concepts#meta-flags)).
+
+## Adapters
+
+### `fetchAdapter()`
+
+```ts
+import { fetchAdapter } from '@lamstack/http-client/adapters/fetch';
+
+const client = new HttpClient({ adapter: fetchAdapter() });
+
+// Inject a replacement (e.g. undici's fetch in older Node, or a test double):
+const testClient = new HttpClient({ adapter: fetchAdapter({ fetch: myFetch }) });
+```
+
+Wraps global `fetch`. Handles JSON/FormData/Blob/string/ArrayBuffer/typed-array
+(`Uint8Array`, `DataView`, ...)/URLSearchParams/`ReadableStream` bodies automatically
+(sets `content-type: application/json` only when it has to JSON-stringify a plain
+object — never for `FormData`, so multipart uploads keep their browser/Node-generated
+boundary). Combines your `signal` with an internal timeout-derived one via
+`AbortSignal.any(...)`, which needs **Node 20.3+ or Safari 17.4+** — narrower than this
+package's own `engines.node: ">=20"`. Chrome/Firefox/Edge have supported it since 2023;
+if you must support Node 20.0–20.2 or an older Safari, polyfill `AbortSignal.any` before
+constructing the adapter.
+
+### `axiosAdapter()`
+
+```ts
+import axios from 'axios';
+import { axiosAdapter } from '@lamstack/http-client/adapters/axios';
+
+const client = new HttpClient({ adapter: axiosAdapter(axios.create({ baseURL: '...' })) });
+```
+
+Wraps a caller-supplied `AxiosInstance` as an **opaque transport** — it doesn't matter
+whether that instance itself uses XHR, Node's `http`, or axios's own newer
+`adapter: 'fetch'` option internally. The adapter disables axios's own JSON
+auto-parsing/`validateStatus` (both vary across environments) so behavior stays
+identical to the fetch adapter regardless of your axios configuration, and uses the same
+`AbortSignal.any(...)`-based timeout handling (same Node 20.3+/Safari 17.4+ requirement
+as `fetchAdapter()` above).
+
+### Writing your own adapter
+
+Anything implementing `HttpAdapter` works — e.g. to target `undici` directly, React
+Native's networking stack, or a fully scripted adapter for tests:
+
+```ts
+import type { HttpAdapter, HttpRequest, HttpResponse } from '@lamstack/http-client';
+
+function myAdapter(): HttpAdapter {
+  return {
+    name: 'my-adapter',
+    capabilities: { uploadProgress: false, downloadProgress: false, stream: false },
+    async send<T>(request: HttpRequest) {
+      // ...call your transport, then normalize into an HttpResponse...
+      // Any non-2xx outcome (or a network/timeout/cancellation failure) must
+      // throw an HttpError — that's the one contract every plugin relies on.
+      return {} as HttpResponse<T>;
+    },
+  };
+}
+```
+
+## `auth` and `Authenticator`
+
+```ts
+import { auth } from '@lamstack/http-client';
+
+client.use(auth(myAuthenticator));
+client.use(auth(myAuthenticator, { skip: (request) => request.url.startsWith('/public') }));
+```
+
+| Option  | Type                                | Description                                                                               |
+| ------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| `skip`  | `(request: HttpRequest) => boolean` | Defaults to `metaOptOut('auth')`. Replaces the default entirely rather than adding to it. |
+| `order` | `number`                            | Defaults to `PluginOrder.auth` (`100`).                                                   |
+
+### Built-in authenticators
+
+```ts
+import { allOf, apiKey, basic, bearer, withHeaders } from '@lamstack/http-client';
+
+// The common case — a Bearer token from any source with getAccessToken():
+client.use(auth(bearer(session)));
+client.use(auth(bearer(session, { header: 'x-api-key', scheme: '' }))); // custom header, no "Bearer " prefix
+client.use(auth(bearer(() => currentToken))); // or a plain function
+
+// A static or dynamically-resolved API key, as a header or a query parameter:
+client.use(auth(apiKey({ in: 'header', name: 'x-api-key', value: process.env.API_KEY! })));
+client.use(auth(apiKey({ in: 'query', name: 'key', value: async () => rotateKey() })));
+
+// HTTP Basic auth:
+client.use(auth(basic(username, password)));
+
+// Compose several — e.g. a bearer token plus a request signature:
+client.use(
+  auth(
+    allOf(bearer(session), async (request) =>
+      withHeaders(request, { 'x-signature': await sign(request) }),
+    ),
+  ),
+);
+```
+
+`bearer()` never emits a literal `"Bearer null"` — if its source resolves `null`/no
+token, the header is simply left unset. Its source contract is just
+`{ getAccessToken(): Awaitable<string | null> }` (or a plain function).
+
+## `recover`
+
+```ts
+import { metaOptOut, onStatus, recover } from '@lamstack/http-client';
+
+client.use(
+  recover({
+    recover: () => session.renew(), // required
+    shouldRecover: onStatus(401, { exclude: ['/auth/login', '/auth/refresh'] }),
+    skip: metaOptOut('recover'),
+    canRecover: () => session.canRenew(),
+    maxAttempts: 1,
+    maxStaleRetries: 1,
+    cooldownMs: 1000,
+    events: recoveryEvents,
+  }),
+);
+```
+
+| Option            | Type                                               | Description                                                                                                                                                                            |
+| ----------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `recover`         | `(context: RecoveryContext) => Promise<void>`      | Required. Runs exactly once per cycle, shared by every request queued behind it.                                                                                                       |
+| `shouldRecover`   | `(context: RecoveryContext) => Awaitable<boolean>` | Decides whether a given failure is eligible for recovery. Defaults to `onStatus(401)`.                                                                                                 |
+| `skip`            | `(request: HttpRequest) => boolean`                | Checked first, before `shouldRecover`, independent of it. Defaults to `metaOptOut('recover')`.                                                                                         |
+| `canRecover`      | `() => Awaitable<boolean>`                         | Optional optimization: skip a doomed recovery attempt before it starts.                                                                                                                |
+| `maxAttempts`     | `number`                                           | Maximum recovery cycles per logical request. Defaults to `1`. Independent of `maxStaleRetries`.                                                                                        |
+| `maxStaleRetries` | `number`                                           | Maximum consecutive stale-generation retries before giving up. Defaults to `1`. Independent of `maxAttempts` — see [Concepts: Stale retries](/http-client/concepts#stale-retries).     |
+| `cooldownMs`      | `number`                                           | Cooldown after a failed cycle before another request may start a fresh one. Defaults to `1000`; `0` disables it. See [Concepts: Refresh storms](/http-client/concepts#refresh-storms). |
+| `events`          | `EventBus<RecoveryEventMap>`                       | Optional — see [Recovery events](#recovery-events-eventbus) below.                                                                                                                     |
+| `order`           | `number`                                           | Defaults to `PluginOrder.recover` (`0`).                                                                                                                                               |
+
+`onStatus(status, { exclude? })` matches an eligible status (default `401`), excluding
+requests whose URL matches one of `exclude` — typically the recovery endpoint itself, to
+avoid a loop.
+
+### Wiring to a token store
+
+There's no built-in session helper yet — see
+[Concepts: wiring `auth` + `recover` to a token store](/http-client/concepts#wiring-auth--recover-to-a-token-store)
+for the JSON-body-refresh-token and HttpOnly-cookie worked examples.
+
+## `errorMapper`
+
+```ts
+import { errorMapper, HttpError } from '@lamstack/http-client';
+
+class ValidationError extends Error {
+  constructor(public readonly fields: Record<string, string>) {
+    super('Validation failed');
+  }
+}
+
+client.use(
+  errorMapper((error) => (error.status === 422 ? new ValidationError(error.data as never) : error)),
+);
+
+await client.get('/x', { meta: { mapError: false } }); // opt this one request out
+```
+
+| Option  | Type                                | Description                                                                                                                                                                                |
+| ------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `skip`  | `(request: HttpRequest) => boolean` | Defaults to `metaOptOut('mapError')`.                                                                                                                                                      |
+| `order` | `number`                            | Defaults to `PluginOrder.normalize` (`-100`) — outside `recover`/`auth`, so `recover` still inspects the raw `HttpError`; only errors that survive a recovery retry ever reach the mapper. |
+
+## `HttpError`
+
+Every adapter throws an `HttpError` for any non-2xx response, network failure, timeout,
+or cancellation — never a raw transport-specific error:
+
+```ts
+class HttpError<T = unknown> extends Error {
+  code: 'HTTP_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'PARSE_ERROR' | 'UNKNOWN';
+  status: number; // 0 when there is no HTTP response at all
+  data?: T; // the parsed error response body, when there is one
+  request: HttpRequest;
+  response?: HttpResponse<T>;
+  cause?: unknown; // non-enumerable, matching native Error.cause
+  get isNetworkError(): boolean; // code === 'NETWORK_ERROR'
+  get isCanceled(): boolean; // code === 'CANCELED'
+  static is(error: unknown): error is HttpError;
+  static from(error: unknown, request: HttpRequest): HttpError; // wraps anything else, passes an existing HttpError through unchanged
+}
+```
+
+`HttpError.from()`'s fallback is `'UNKNOWN'`, not `'NETWORK_ERROR'` — it's used by
+`recover()`/`errorMapper()` on anything they catch that isn't already an `HttpError`,
+which normally only happens for a bug in a plugin between them and the adapter. Claiming
+`NETWORK_ERROR` for that would make `isNetworkError` lie and could get a real bug
+silently retried by `recover()`.
+
+```ts
+try {
+  await client.get('/x');
+} catch (error) {
+  if (HttpError.is(error)) {
+    console.log(error.status, error.code, error.data);
+  }
+}
+```
+
+## Recovery events (`EventBus`)
+
+A generic typed pub/sub, not specific to auth — `recover()` defines its own event map on
+top of it:
+
+```ts
+import { EventBus } from '@lamstack/http-client';
+import type { RecoveryEventMap } from '@lamstack/http-client';
+
+const recoveryEvents = new EventBus<RecoveryEventMap>();
+
+const unsubscribe = recoveryEvents.on('recovery:failed', ({ error }) => {
+  session.end();
+  redirectToLogin();
+});
+// later: unsubscribe(); — or recoveryEvents.off('recovery:failed', listener)
+
+recoveryEvents.on('recovery:succeeded', () => console.log('session renewed'));
+recoveryEvents.on('recovery:unavailable', ({ error }) => reportToSentry(error));
+
+client.use(recover({ recover: renewSession, events: recoveryEvents }));
+```
+
+| Method     | Signature                         | Description                                                                                             |
+| ---------- | --------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `on`       | `(event, listener) => () => void` | Subscribes. Returns an unsubscribe function, which composes naturally with a React `useEffect` cleanup. |
+| `off`      | `(event, listener) => void`       | Explicit unsubscribe — same signature as `on`.                                                          |
+| `emit`     | `(event, payload) => void`        | Triggers every listener for `event`. A throwing listener never prevents its siblings from running.      |
+| `clearAll` | `() => void`                      | Removes every listener for every event — handy in a test's `afterEach`.                                 |
+
+`EventBus` is **not a singleton** — create one per app (or per independent set of
+clients that should share recovery state) and pass it explicitly.
+
+| Event                  | Payload                | Fires                                                                                                                    |
+| ---------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `recovery:succeeded`   | `{}`                   | Once per successful recovery cycle, never once per queued request                                                        |
+| `recovery:failed`      | `{ error: unknown }`   | Once per failed recovery cycle                                                                                           |
+| `recovery:unavailable` | `{ error: HttpError }` | Once per request whose `canRecover()` check failed, or that hit an active `cooldownMs` window — recovery never attempted |
+
+## Serializers
+
+By default, `upload()`'s non-primitive values are handled by `WebFileSerializer`
+(`File`/`Blob`). For React Native (no `File`/`Blob`; a `FormData` polyfill that expects
+`{ uri, type?, name? }` objects instead), pass `NativeFileSerializer`:
+
+```ts
+import { NativeFileSerializer } from '@lamstack/http-client';
+
+const client = new HttpClient({
+  adapter: fetchAdapter(),
+  fileSerializer: new NativeFileSerializer(),
+});
+
+await client.upload('/files', { avatar: { uri: 'file://photo.jpg' } });
+```
+
+```ts
+await client.upload('/files', {
+  title: 'Vacation photo',
+  taken: new Date(), // -> ISO string
+  tags: ['beach', 'sun'], // -> repeated form field
+  metadata: { camera: 'Pixel' }, // -> JSON-stringified
+  avatar: someFile, // File/Blob -> handled by the configured FileSerializer
+});
+```
+
+`FormBuilder` is the class doing this conversion (also exported from the package root) —
+`client.upload()` is a thin wrapper around `new FormBuilder(fileSerializer).build(data)`;
+construct one directly if you need a `FormData` without going through `HttpClient`. An
+existing `FormData` is sent through untouched instead of being rebuilt; `upload()` never
+sets an explicit `Content-Type` — the adapter's transport generates the multipart
+boundary itself.
+
+Write your own `FileSerializer` (`accepts(value)` / `serialize(formData, key, value)`)
+for anything else — e.g. a `Buffer`-based Node upload path.
+
+## Downloads
+
+```ts
+const report = await client.download('/report.pdf'); // Blob
+```
+
+Equivalent to `client.get(url, { responseType: 'blob' })`, exposed as its own method for
+clarity at the call site.
+
+## Cancellation
+
+`AbortSignal` is already first-class on every request (`HttpRequestInit.signal`), so
+cancellation isn't a special `HttpClient` method — `cancelable()` is a small standalone
+helper for the common "start a request, get a way to cancel it" shape:
+
+```ts
+import { cancelable } from '@lamstack/http-client';
+
+const { promise, cancel } = cancelable((signal) => client.get('/slow', { signal }));
+
+cancel(); // rejects `promise` with an HttpError whose code is 'CANCELED'
+```
+
+## Writing your own plugin
+
+`auth`, `recover`, and `errorMapper` are not privileged — they're written against the
+exact same `Middleware`/`HttpPlugin` contract available to you:
+
+```ts
+import { withHeaders } from '@lamstack/http-client';
+import type { HttpPlugin } from '@lamstack/http-client';
+
+function clientIdPlugin(clientId: string): HttpPlugin {
+  return {
+    name: 'client-id',
+    order: 50, // between recover and auth — see PluginOrder
+    handler: async (request, next) => {
+      return next(withHeaders(request, { 'x-client-id': clientId }));
+    },
+  };
+}
+
+client.use(clientIdPlugin('abc123'));
+```
+
+Never build the header object by hand (`{ ...request.headers, 'X-Client-Id': ... }`) —
+`withHeaders` normalizes the key the same way `resolve()` does, so a header that differs
+only in case from one already on the request overwrites it instead of adding a duplicate.
+`withMeta(request, meta)` does the equivalent for `meta`. Both are pure — they return a
+new request, never mutate the one you pass in.
+
+A retry-style plugin that inspects the response _after_ `next()` resolves/rejects:
+
+```ts
+function loggingPlugin(): HttpPlugin {
+  return {
+    name: 'logging',
+    order: PluginOrder.observe,
+    handler: async (request, next) => {
+      const start = Date.now();
+      try {
+        const response = await next(request);
+        console.log(request.method, request.url, response.status, `${Date.now() - start}ms`);
+        return response;
+      } catch (error) {
+        console.log(request.method, request.url, 'failed', `${Date.now() - start}ms`);
+        throw error;
+      }
+    },
+  };
+}
+```
+
+Remember `next()` is re-entrant (see
+[Concepts: the middleware pipeline](/http-client/concepts#the-middleware-pipeline)) — a
+plugin that retries by calling `next()` again only re-runs middleware registered _after_
+itself, which is exactly what makes that safe to do from inside `.use()`.

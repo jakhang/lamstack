@@ -35,6 +35,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check exports (publint + attw)
+        run: pnpm run check:exports
+
       - name: Lint
         run: pnpm lint
 
@@ -43,3 +46,42 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  http-client-node-matrix:
+    name: http-client (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    # Scoped to @lamstack/http-client only, on top of (not instead of) the main job above
+    # — its own engines.node ("20.3.0", set by the AbortSignal.any() requirement both
+    # adapters share) is a claim about a specific floor, not just "recent Node," and the
+    # main job's single Node 22 only ever exercised a version well above it. Kept as its
+    # own job, filtered to this one package, rather than matrixing the main job, so a
+    # Node-version issue in an unrelated package (e.g. apps/docs' Next.js toolchain)
+    # can't fail this check or vice versa.
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.3.0, 22, 24]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @lamstack/http-client build
+
+      - name: Typecheck
+        run: pnpm --filter @lamstack/http-client typecheck
+
+      - name: Test
+        run: pnpm --filter @lamstack/http-client test

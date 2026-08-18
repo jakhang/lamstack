@@ -1,0 +1,126 @@
+import { Callout, Tabs } from 'nextra/components';
+
+# @lamstack/http-client
+
+A framework-agnostic HTTP client core built around a pluggable, Koa/onion-style
+middleware pipeline. The core has **zero runtime dependency on axios or fetch** — you
+choose a transport adapter (`fetch` or `axios`, both included) and layer behavior
+(credential attachment, failure recovery, error mapping, or anything you write yourself)
+on top via a single `.use()` API. No plugin shipped with this package — not `auth`, not
+`recover` — has any capability you don't also have.
+
+Unlike the rest of `@lamstack`, this package has no React dependency at all — it works
+identically in a Node service, a React Native app, or a browser SPA.
+
+<Callout type="warning">
+  Pre-1.0 (`0.x`): the API may still change between minor versions. `retryPlugin`, upload/download
+  progress, and a session-layer helper are architected for but not implemented yet — see
+  [Roadmap](#roadmap) below.
+</Callout>
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tabs.Tab>
+    ```bash
+    pnpm add @lamstack/http-client
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    npm install @lamstack/http-client
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    yarn add @lamstack/http-client
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    bun add @lamstack/http-client
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+`axios` is an **optional peer dependency** — only needed if you use
+`@lamstack/http-client/adapters/axios`. Sticking to the `fetch` adapter, you never
+install it.
+
+## Quickstart
+
+```ts
+import { HttpClient } from '@lamstack/http-client';
+import { fetchAdapter } from '@lamstack/http-client/adapters/fetch';
+
+const client = new HttpClient({
+  adapter: fetchAdapter(),
+  baseURL: 'https://api.example.com',
+});
+
+interface User {
+  id: string;
+  name: string;
+}
+
+const user = await client.get<User>('/users/me');
+await client.post('/users', { name: 'Ada' });
+await client.put(`/users/${user.id}`, { name: 'Ada Lovelace' });
+await client.delete(`/users/${user.id}`);
+```
+
+`get`/`post`/`put`/`patch`/`delete` all return the **parsed response body** directly —
+not a wrapper object. Use `client.request()` (see
+[API reference](/http-client/api-reference#httpclient)) when you need the status code,
+headers, or other response metadata.
+
+Attaching credentials and recovering from an expired one is two more `.use()` calls:
+
+```ts
+import { auth, bearer, recover, onStatus } from '@lamstack/http-client';
+
+const refreshClient = client.extend({}); // no plugins yet — safe for the refresh call itself
+
+client.use(
+  recover({
+    recover: () => session.renew(), // your own object — see Concepts below
+    shouldRecover: onStatus(401),
+  }),
+);
+client.use(auth(bearer(session)));
+```
+
+- [Concepts](/http-client/concepts) — the request lifecycle, the middleware pipeline and
+  its re-entrant `next()`, `meta` flags, and how `auth`/`recover` fit together around a
+  token store.
+- [API reference](/http-client/api-reference) — `HttpClient`, both adapters, every
+  built-in plugin, `HttpError`, `EventBus`, and the serializers.
+- [Testing](/http-client/testing) — scripted adapters for integration-style tests, and
+  `resolve()` for unit-testing a plugin directly.
+
+## Why this exists
+
+Most HTTP client wrappers pick a transport (axios, or `fetch`) and bolt auth/recovery
+logic onto it via that transport's own interceptor system. That logic then can't move to
+a different transport, and typically can't be unit-tested without mocking the transport
+itself. This package inverts that: the pipeline (auth, recovery, error mapping, retry
+policy, anything else) is transport-agnostic middleware; adapters are a thin,
+interchangeable translation layer between that pipeline and a real transport. The same
+`auth`/`recover` setup works identically whether the underlying adapter is `fetch` or an
+existing `axios` instance — proven by a shared contract test suite that runs both
+adapters through identical scenarios (200/404/500/timeout/abort/...) and asserts
+identical results.
+
+## Roadmap
+
+Not yet implemented:
+
+- **`retryPlugin`** — backoff/jitter, `Retry-After` support, method-safety rules.
+  `PluginOrder.retry` is already reserved for it.
+- **Upload/download progress** — both adapters currently report every
+  `AdapterCapabilities` field `false`, honestly.
+- **An SSE plugin** — the plugin system is already extensible enough for one; it just
+  doesn't ship yet.
+- **A session-layer helper** — a built-in primitive tying a stored token to both `auth()`
+  and `recover()`, so the hand-written session object in
+  [Concepts](/http-client/concepts#wiring-auth--recover-to-a-token-store) isn't the only
+  option. An earlier version of this shipped briefly during `0.1.0` development and was
+  pulled before release to be redesigned rather than carried forward as-is.

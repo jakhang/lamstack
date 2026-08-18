@@ -136,7 +136,7 @@ list plus `parallel()` within a stage, nothing more. It also has no SSR/Suspense
 integration and no cross-reload caching: every mount (or `retry()`) is a fresh run, fresh
 `state`, fresh `AbortController`.
 
-Full docs and API reference: **[omnireact-six.vercel.app/initializer](https://omnireact-six.vercel.app/initializer)**
+Full docs and API reference: **[lamstack-docs.vercel.app/initializer](https://lamstack-docs.vercel.app/initializer)**
 
 ## License
 

@@ -23,9 +23,13 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,md,mdx,json,yaml,yml}\"",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "pnpm -r build && changeset publish"
+    "release": "pnpm -r --filter \"./packages/*\" build && changeset publish",
+    "check:publint": "pnpm -r --filter \"./packages/*\" exec publint",
+    "check:attw": "pnpm -r --filter \"./packages/*\" exec attw --pack .",
+    "check:exports": "pnpm run check:publint && pnpm run check:attw"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^2.31.1",
     "@eslint/js": "^10.0.1",
     "@testing-library/jest-dom": "^7.0.0",
@@ -38,6 +42,7 @@
     "globals": "^17.9.0",
     "jsdom": "^30.0.1",
     "prettier": "^3.9.6",
+    "publint": "^0.3.23",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tsup": "^8.5.1",

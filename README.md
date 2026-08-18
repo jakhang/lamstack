@@ -6,7 +6,7 @@ single `@lamstack` npm scope. MIT licensed. Each package is installable on its o
 feature package depends on at most one shared core (`@lamstack/react-core` or
 `@lamstack/initializer`), never on a sibling feature package.
 
-📖 **Docs, live demos, and API reference: [omnireact-six.vercel.app](https://omnireact-six.vercel.app)**
+📖 **Docs, live demos, and API reference: [lamstack-docs.vercel.app](https://lamstack-docs.vercel.app)**
 
 ```bash
 pnpm add @lamstack/react-dialog
